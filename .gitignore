@@ -1,0 +1,17 @@
+# Ignore build directory and build artifacts
+build/
+build
+
+# CMake files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Editor/OS files
+*.swp
+*.swo
+*.DS_Store
+*.user
+*.idea/
+.vscode/
