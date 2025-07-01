@@ -10,7 +10,7 @@
 #define WIDTH 160
 #define HEIGHT 90
 
-#include "vec2.h"
+#include "vec2i.h"
 
 // little endian
 void write_u16(std::ofstream &out, uint16_t val) {
@@ -210,10 +210,10 @@ int main(int argc, char *argv[]) {
     for (int y = 0; y < bmp_height; ++y) {
       for (int x = 0; x < bmp_width; ++x) {
         int ticks = SDL_GetTicks();
-        vec2 offset = vec2(-(bmp_width / 2) + (WIDTH / 2) +
-                               32.0 * std::sin(float(ticks) / 1000.0f),
-                           -(bmp_height / 2) + (HEIGHT / 2) +
-                               32.0 * std::cos(float(ticks) / 1000.0f));
+        vec2i offset = vec2i(-(bmp_width / 2) + (WIDTH / 2) +
+                                 32.0 * std::sin(float(ticks) / 1000.0f),
+                             -(bmp_height / 2) + (HEIGHT / 2) +
+                                 32.0 * std::cos(float(ticks) / 1000.0f));
         int transformed_x = x + offset.x;
         int transformed_y = y + offset.y;
         bool within_bounds = (transformed_x >= 0) && (transformed_x < WIDTH) &&
