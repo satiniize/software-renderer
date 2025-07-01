@@ -2,7 +2,6 @@
 #include <SDL3/SDL.h>
 #include <cmath>
 #include <cstdint>
-#include <fstream>
 #include <iostream>
 #include <stdint.h>
 #include <string>
@@ -23,10 +22,7 @@ int main(int argc, char *argv[]) {
   int image_height = 16;
 
   // Create a test image (gradient)
-  Bitmap bmp_write;
-  bmp_write.width = image_width;
-  bmp_write.height = image_height;
-  bmp_write.pixels.resize(image_width * image_height);
+  Bitmap bmp_write(image_width, image_height);
   for (int y = 0; y < image_height; ++y) {
     for (int x = 0; x < image_width; ++x) {
       uint8_t r =
@@ -34,31 +30,30 @@ int main(int argc, char *argv[]) {
       uint8_t g =
           static_cast<int>(static_cast<float>(y) / image_height * 255.0f);
       uint8_t b = 0;
-      bmp_write.pixels[y * image_width + x] =
-          (r << 24) | (g << 16) | (b << 8) | 0xFF;
+      bmp_write.set_pixel(x, y, (r << 24) | (g << 16) | (b << 8) | 0xFF);
     }
   }
 
-  // Write BMP file
-  if (!write_bitmap(image_file_name_write, bmp_write)) {
+  // Dump BMP file
+  if (!bmp_write.dump(image_file_name_write)) {
     std::cerr << "Failed to write BMP file.\n";
     return 1;
   }
 
-  // Read BMP file
-  Bitmap bmp_read;
-  if (!read_bitmap(image_file_name_read, bmp_read)) {
+  // Read BMP file using constructor
+  Bitmap bmp_read(image_file_name_read);
+  if (bmp_read.width() == 0 || bmp_read.height() == 0) {
     std::cerr << "Failed to open image file.\n";
     return 1;
   }
 
-  std::cout << "Width: " << bmp_read.width << std::endl;
-  std::cout << "Height: " << bmp_read.height << std::endl;
-  std::cout << "Pixels: " << bmp_read.pixels.size() << std::endl;
+  std::cout << "Width: " << bmp_read.width() << std::endl;
+  std::cout << "Height: " << bmp_read.height() << std::endl;
+  std::cout << "Pixels: " << bmp_read.pixels().size() << std::endl;
 
-  int bmp_width = bmp_read.width;
-  int bmp_height = bmp_read.height;
-  std::vector<uint32_t> texture_pixels = bmp_read.pixels;
+  int bmp_width = bmp_read.width();
+  int bmp_height = bmp_read.height();
+  std::vector<uint32_t> texture_pixels = bmp_read.pixels();
 
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
     SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());

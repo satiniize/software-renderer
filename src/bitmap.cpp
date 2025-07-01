@@ -31,9 +31,9 @@ static uint32_t read_u32(std::ifstream &in) {
   return (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
 }
 
-bool write_bitmap(const std::string &filename, const Bitmap &bmp) {
-  int width = bmp.width;
-  int height = bmp.height;
+bool Bitmap::dump(const std::string &filename) const {
+  int width = width_;
+  int height = height_;
   int row_size = ((width * 3 + 3) / 4) * 4;
   int padding = row_size - width * 3;
   int image_size = row_size * height;
@@ -67,7 +67,7 @@ bool write_bitmap(const std::string &filename, const Bitmap &bmp) {
   for (int y = 0; y < height; ++y) {
     int bmp_y = height - 1 - y;
     for (int x = 0; x < width; ++x) {
-      uint32_t pixel = bmp.pixels[bmp_y * width + x];
+      uint32_t pixel = pixels_[bmp_y * width + x];
       uint8_t r = (pixel >> 24) & 0xFF;
       uint8_t g = (pixel >> 16) & 0xFF;
       uint8_t b = (pixel >> 8) & 0xFF;
@@ -84,7 +84,7 @@ bool write_bitmap(const std::string &filename, const Bitmap &bmp) {
   return true;
 }
 
-bool read_bitmap(const std::string &filename, Bitmap &bmp) {
+bool Bitmap::load(const std::string &filename) {
   std::ifstream in(filename, std::ios::binary);
   if (!in)
     return false;
@@ -119,9 +119,9 @@ bool read_bitmap(const std::string &filename, Bitmap &bmp) {
   int row_size = ((width * 3 + 3) / 4) * 4;
   int padding = row_size - width * 3;
 
-  bmp.width = width;
-  bmp.height = height;
-  bmp.pixels.resize(width * height);
+  width_ = width;
+  height_ = height;
+  pixels_.assign(width * height, 0);
 
   for (uint32_t y = 0; y < height; ++y) {
     uint32_t bmp_y = height - 1 - y;
@@ -131,8 +131,9 @@ bool read_bitmap(const std::string &filename, Bitmap &bmp) {
       uint8_t b = static_cast<uint8_t>(pixel_buffer[0]);
       uint8_t g = static_cast<uint8_t>(pixel_buffer[1]);
       uint8_t r = static_cast<uint8_t>(pixel_buffer[2]);
-      // Store as 0xRRGGBBFF (alpha always 0xFF)
-      bmp.pixels[bmp_y * width + x] = (r << 24) | (g << 16) | (b << 8) | 0xFF;
+      // If magenta (R=255, B=255), set alpha to 0x00, else 0xFF
+      uint8_t a = (r == 255 && b == 255) ? 0x00 : 0xFF;
+      set_pixel(x, bmp_y, (r << 24) | (g << 16) | (b << 8) | a);
     }
     in.ignore(padding);
   }

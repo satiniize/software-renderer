@@ -3,17 +3,41 @@
 #include <string>
 #include <vector>
 
-// Minimal bitmap structure for 24-bit BMP files
-struct Bitmap {
-  int width;
-  int height;
-  std::vector<uint32_t> pixels; // RGBA8888 format (0xRRGGBBAA)
+// Minimal bitmap class for 24-bit BMP files
+class Bitmap {
+public:
+  // Default constructor: width=0, height=0, pixels empty
+  Bitmap() : width_(0), height_(0), pixels_() {}
+
+  // Constructor with width and height
+  Bitmap(int w, int h) : width_(w), height_(h), pixels_(w * h, 0) {}
+
+  // Constructor from file path
+  Bitmap(const std::string &path) : width_(0), height_(0), pixels_() {
+    load(path);
+  }
+
+  // Load bitmap from file path, returns true on success
+  bool load(const std::string &path);
+
+  // Dump bitmap to file path, returns true on success
+  bool dump(const std::string &path) const;
+
+  // Getters
+  int width() const { return width_; }
+  int height() const { return height_; }
+  const std::vector<uint32_t> &pixels() const { return pixels_; }
+  std::vector<uint32_t> &pixels() { return pixels_; }
+
+  // Set a pixel at (x, y) to value (no bounds check)
+  void set_pixel(int x, int y, uint32_t value) {
+    pixels_[y * width_ + x] = value;
+  }
+
+private:
+  int width_;
+  int height_;
+  std::vector<uint32_t> pixels_; // RGBA8888 format (0xRRGGBBAA)
 };
 
-// Writes a 24-bit BMP file from the Bitmap struct (ignores alpha channel).
-// Returns true on success, false on failure.
-bool write_bitmap(const std::string &filename, const Bitmap &bmp);
-
-// Reads a 24-bit BMP file into the Bitmap struct (sets alpha to 0xFF).
-// Returns true on success, false on failure.
-bool read_bitmap(const std::string &filename, Bitmap &bmp);
+// (No free functions; use Bitmap::load and Bitmap::dump)
