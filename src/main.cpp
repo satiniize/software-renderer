@@ -1,5 +1,6 @@
 #include <SDL3/SDL.h>
 #include <cmath>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <stdint.h>
@@ -25,11 +26,25 @@ void write_u32(std::ofstream &out, uint32_t val) {
   out.put((val >> 24) & 0xFF);
 }
 
+uint16_t read_u16(std::ifstream &in) {
+  uint8_t b0 = in.get();
+  uint8_t b1 = in.get();
+  return (b1 << 8) | b0;
+}
+
+uint32_t read_u32(std::ifstream &in) {
+  uint8_t b0 = in.get();
+  uint8_t b1 = in.get();
+  uint8_t b2 = in.get();
+  uint8_t b3 = in.get();
+  return (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
+}
+
 int main(int argc, char *argv[]) {
   std::string image_file_name = "test_image.bmp";
 
-  int image_width = 64;
-  int image_height = 64;
+  int image_width = 16;
+  int image_height = 16;
 
   int row_size = ((image_width * 3 + 3) / 4) * 4;
   int padding = row_size - image_width * 3;
@@ -79,46 +94,27 @@ int main(int argc, char *argv[]) {
   // Write to file
   out.close();
 
+  // Open written file
   std::ifstream image_texture(image_file_name, std::ios::binary);
   if (!image_texture) {
     std::cerr << "Failed to open image file.\n";
     return 1;
   }
+
   image_texture.seekg(10, std::ios::beg);
-  char offset_buffer[4];
-  image_texture.read(offset_buffer, 4);
-  uint32_t pixel_data_offset = offset_buffer[0] | (offset_buffer[1] << 8) |
-                               (offset_buffer[2] << 16) |
-                               (offset_buffer[3] << 24);
+  uint32_t pixel_data_offset = read_u32(image_texture);
+  image_texture.seekg(18, std::ios::beg);
+  uint32_t bmp_width = read_u32(image_texture);
+  uint32_t bmp_height = read_u32(image_texture);
+  image_texture.seekg(28, std::ios::beg);
+  uint32_t bit_depth = read_u16(image_texture);
 
   std::cout << "Pixel data offset: " << pixel_data_offset << std::endl;
-
-  image_texture.seekg(28, std::ios::beg);
-  char bit_depth_buffer[2];
-  image_texture.read(bit_depth_buffer, 2);
-  uint32_t bit_depth = bit_depth_buffer[0] | (bit_depth_buffer[1] << 8);
-
-  std::cout << "Bit depth: " << bit_depth << std::endl;
-
-  image_texture.seekg(18, std::ios::beg);
-  char width_buffer[4];
-  image_texture.read(width_buffer, 4);
-  uint32_t bmp_width = static_cast<uint8_t>(width_buffer[0]) |
-                       (static_cast<uint8_t>(width_buffer[1]) << 8) |
-                       (static_cast<uint8_t>(width_buffer[2]) << 16) |
-                       (static_cast<uint8_t>(width_buffer[3]) << 24);
-
-  char height_buffer[4];
-  image_texture.read(height_buffer, 4);
-  uint32_t bmp_height = static_cast<uint8_t>(height_buffer[0]) |
-                        (static_cast<uint8_t>(height_buffer[1]) << 8) |
-                        (static_cast<uint8_t>(height_buffer[2]) << 16) |
-                        (static_cast<uint8_t>(height_buffer[3]) << 24);
-
   std::cout << "Width: " << bmp_width << std::endl;
   std::cout << "Height: " << bmp_height << std::endl;
+  std::cout << "Bit depth: " << bit_depth << std::endl;
 
-  int bytes_per_pixel = bit_depth / 8;
+  int bytes_per_pixel = bit_depth / 8; // This assumes 8 8 8 BGR
   std::vector<uint32_t> texture_pixels(bmp_width * bmp_height);
 
   image_texture.seekg(pixel_data_offset, std::ios::beg);
