@@ -195,15 +195,7 @@ int main(int argc, char *argv[]) {
       for (int x = 0; x < WIDTH; ++x) {
         int checker = ((x / checker_size) + (y / checker_size)) % 2;
         uint8_t v = checker ? 255 : 0;
-        // int tex_x = x - offset.x;
-        // int tex_y = y - offset.y;
         pixels[y * WIDTH + x] = (v << 24) | (v << 16) | (v << 8) | 0xFF;
-        // if (tex_x >= 0 && tex_x < bmp_width && tex_y >= 0 &&
-        //     tex_y < bmp_height) {
-        //   pixels[y * WIDTH + x] = texture_pixels[tex_y * bmp_width + tex_x];
-        // } else {
-        //   pixels[y * WIDTH + x] = (v << 24) | (v << 16) | (v << 8) | 0xFF;
-        // }
       }
     }
 
