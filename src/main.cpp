@@ -9,12 +9,7 @@
 #define WIDTH 160
 #define HEIGHT 90
 
-class vec2 {
-public:
-  vec2(int x, int y) : x(x), y(y) {}
-  int x;
-  int y;
-};
+#include "vec2.h"
 
 // little endian
 void write_u16(std::ofstream &out, uint16_t val) {
