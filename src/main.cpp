@@ -1,10 +1,20 @@
 #include <SDL3/SDL.h>
+#include <cmath>
 #include <fstream>
+#include <iostream>
 #include <stdint.h>
-#include <string.h>
+#include <string>
+#include <vector>
 
 #define WIDTH 160
 #define HEIGHT 90
+
+class vec2 {
+public:
+  vec2(int x, int y) : x(x), y(y) {}
+  int x;
+  int y;
+};
 
 // little endian
 void write_u16(std::ofstream &out, uint16_t val) {
@@ -21,15 +31,17 @@ void write_u32(std::ofstream &out, uint32_t val) {
 }
 
 int main(int argc, char *argv[]) {
-  int image_width = 16;
-  int image_height = 16;
+  std::string image_file_name = "test_image.bmp";
+
+  int image_width = 64;
+  int image_height = 64;
 
   int row_size = ((image_width * 3 + 3) / 4) * 4;
   int padding = row_size - image_width * 3;
   int image_size = row_size * image_height;
   int file_size = 14 + 40 + image_size;
 
-  std::ofstream out("test_image.bmp", std::ios::binary);
+  std::ofstream out(image_file_name, std::ios::binary);
 
   // BMP File Header (14 bytes)
   write_u16(out, 0x4D42);    // bfType
@@ -69,7 +81,69 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  // Write to file
   out.close();
+
+  std::ifstream image_texture(image_file_name, std::ios::binary);
+  if (!image_texture) {
+    std::cerr << "Failed to open image file.\n";
+    return 1;
+  }
+  image_texture.seekg(10, std::ios::beg);
+  char offset_buffer[4];
+  image_texture.read(offset_buffer, 4);
+  uint32_t pixel_data_offset = offset_buffer[0] | (offset_buffer[1] << 8) |
+                               (offset_buffer[2] << 16) |
+                               (offset_buffer[3] << 24);
+
+  std::cout << "Pixel data offset: " << pixel_data_offset << std::endl;
+
+  image_texture.seekg(28, std::ios::beg);
+  char bit_depth_buffer[2];
+  image_texture.read(bit_depth_buffer, 2);
+  uint32_t bit_depth = bit_depth_buffer[0] | (bit_depth_buffer[1] << 8);
+
+  std::cout << "Bit depth: " << bit_depth << std::endl;
+
+  image_texture.seekg(18, std::ios::beg);
+  char width_buffer[4];
+  image_texture.read(width_buffer, 4);
+  uint32_t bmp_width = static_cast<uint8_t>(width_buffer[0]) |
+                       (static_cast<uint8_t>(width_buffer[1]) << 8) |
+                       (static_cast<uint8_t>(width_buffer[2]) << 16) |
+                       (static_cast<uint8_t>(width_buffer[3]) << 24);
+
+  char height_buffer[4];
+  image_texture.read(height_buffer, 4);
+  uint32_t bmp_height = static_cast<uint8_t>(height_buffer[0]) |
+                        (static_cast<uint8_t>(height_buffer[1]) << 8) |
+                        (static_cast<uint8_t>(height_buffer[2]) << 16) |
+                        (static_cast<uint8_t>(height_buffer[3]) << 24);
+
+  std::cout << "Width: " << bmp_width << std::endl;
+  std::cout << "Height: " << bmp_height << std::endl;
+
+  int bytes_per_pixel = bit_depth / 8;
+  std::vector<uint32_t> texture_pixels(bmp_width * bmp_height);
+
+  image_texture.seekg(pixel_data_offset, std::ios::beg);
+
+  for (int y = 0; y < bmp_height; ++y) {
+    int bmp_y = bmp_height - 1 - y; // BMP is bottom-up
+    for (int x = 0; x < bmp_width; ++x) {
+      char pixel_buffer[3];
+      image_texture.read(pixel_buffer, bytes_per_pixel);
+      unsigned char blue = pixel_buffer[0];
+      unsigned char green = pixel_buffer[1];
+      unsigned char red = pixel_buffer[2];
+      texture_pixels[bmp_y * bmp_width + x] =
+          (red << 24) | (green << 16) | (blue << 8) | 0xFF;
+    }
+    // Skip row padding
+    int row_size = ((bmp_width * 3 + 3) / 4) * 4;
+    int padding = row_size - bmp_width * 3;
+    image_texture.ignore(padding);
+  }
 
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
     SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
@@ -128,7 +202,19 @@ int main(int argc, char *argv[]) {
       for (int x = 0; x < WIDTH; ++x) {
         int checker = ((x / checker_size) + (y / checker_size)) % 2;
         uint8_t v = checker ? 255 : 0;
-        pixels[y * WIDTH + x] = (0xFF << 24) | (v << 16) | (v << 8) | v;
+        int ticks = SDL_GetTicks();
+        vec2 offset = vec2(-(bmp_width / 2) + (WIDTH / 2) +
+                               32.0 * std::sin(float(ticks) / 1000.0f),
+                           -(bmp_height / 2) + (HEIGHT / 2) +
+                               32.0 * std::cos(float(ticks) / 1000.0f));
+        int tex_x = x - offset.x;
+        int tex_y = y - offset.y;
+        if (tex_x >= 0 && tex_x < bmp_width && tex_y >= 0 &&
+            tex_y < bmp_height) {
+          pixels[y * WIDTH + x] = texture_pixels[tex_y * bmp_width + tex_x];
+        } else {
+          pixels[y * WIDTH + x] = (v << 24) | (v << 16) | (v << 8) | 0xFF;
+        }
       }
     }
 
