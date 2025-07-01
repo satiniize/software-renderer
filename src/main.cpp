@@ -41,7 +41,8 @@ uint32_t read_u32(std::ifstream &in) {
 }
 
 int main(int argc, char *argv[]) {
-  std::string image_file_name = "test_image.bmp";
+  std::string image_file_name_write = "test_image_write.bmp";
+  std::string image_file_name_read = "test_image_read.bmp";
 
   int image_width = 16;
   int image_height = 16;
@@ -51,7 +52,7 @@ int main(int argc, char *argv[]) {
   int image_size = row_size * image_height;
   int file_size = 14 + 40 + image_size;
 
-  std::ofstream out(image_file_name, std::ios::binary);
+  std::ofstream out(image_file_name_write, std::ios::binary);
 
   // BMP File Header (14 bytes)
   write_u16(out, 0x4D42);    // bfType
@@ -94,8 +95,8 @@ int main(int argc, char *argv[]) {
   // Write to file
   out.close();
 
-  // Open written file
-  std::ifstream image_texture(image_file_name, std::ios::binary);
+  // Open written file for reading
+  std::ifstream image_texture(image_file_name_read, std::ios::binary);
   if (!image_texture) {
     std::cerr << "Failed to open image file.\n";
     return 1;
@@ -127,8 +128,9 @@ int main(int argc, char *argv[]) {
       unsigned char blue = pixel_buffer[0];
       unsigned char green = pixel_buffer[1];
       unsigned char red = pixel_buffer[2];
+      unsigned char alpha = (red == 255 && blue == 255) ? 0x00 : 0xFF;
       texture_pixels[bmp_y * bmp_width + x] =
-          (red << 24) | (green << 16) | (blue << 8) | 0xFF;
+          (red << 24) | (green << 16) | (blue << 8) | alpha;
     }
     // Skip row padding
     int row_size = ((bmp_width * 3 + 3) / 4) * 4;
@@ -193,18 +195,55 @@ int main(int argc, char *argv[]) {
       for (int x = 0; x < WIDTH; ++x) {
         int checker = ((x / checker_size) + (y / checker_size)) % 2;
         uint8_t v = checker ? 255 : 0;
+        // int tex_x = x - offset.x;
+        // int tex_y = y - offset.y;
+        pixels[y * WIDTH + x] = (v << 24) | (v << 16) | (v << 8) | 0xFF;
+        // if (tex_x >= 0 && tex_x < bmp_width && tex_y >= 0 &&
+        //     tex_y < bmp_height) {
+        //   pixels[y * WIDTH + x] = texture_pixels[tex_y * bmp_width + tex_x];
+        // } else {
+        //   pixels[y * WIDTH + x] = (v << 24) | (v << 16) | (v << 8) | 0xFF;
+        // }
+      }
+    }
+
+    for (int y = 0; y < bmp_height; ++y) {
+      for (int x = 0; x < bmp_width; ++x) {
         int ticks = SDL_GetTicks();
         vec2 offset = vec2(-(bmp_width / 2) + (WIDTH / 2) +
                                32.0 * std::sin(float(ticks) / 1000.0f),
                            -(bmp_height / 2) + (HEIGHT / 2) +
                                32.0 * std::cos(float(ticks) / 1000.0f));
-        int tex_x = x - offset.x;
-        int tex_y = y - offset.y;
-        if (tex_x >= 0 && tex_x < bmp_width && tex_y >= 0 &&
-            tex_y < bmp_height) {
-          pixels[y * WIDTH + x] = texture_pixels[tex_y * bmp_width + tex_x];
-        } else {
-          pixels[y * WIDTH + x] = (v << 24) | (v << 16) | (v << 8) | 0xFF;
+        int transformed_x = x + offset.x;
+        int transformed_y = y + offset.y;
+        bool within_bounds = (transformed_x >= 0) && (transformed_x < WIDTH) &&
+                             (transformed_y >= 0) && (transformed_y < HEIGHT);
+        if (within_bounds) {
+          uint32_t src = texture_pixels[y * bmp_width + x];
+          uint32_t dst = pixels[transformed_y * WIDTH + transformed_x];
+
+          uint8_t src_r = (src >> 24) & 0xFF;
+          uint8_t src_g = (src >> 16) & 0xFF;
+          uint8_t src_b = (src >> 8) & 0xFF;
+          uint8_t src_a = src & 0xFF;
+
+          uint8_t dst_r = (dst >> 24) & 0xFF;
+          uint8_t dst_g = (dst >> 16) & 0xFF;
+          uint8_t dst_b = (dst >> 8) & 0xFF;
+          uint8_t dst_a = dst & 0xFF;
+
+          float alpha = src_a / 255.0f;
+
+          uint8_t out_r =
+              static_cast<uint8_t>(src_r * alpha + dst_r * (1.0f - alpha));
+          uint8_t out_g =
+              static_cast<uint8_t>(src_g * alpha + dst_g * (1.0f - alpha));
+          uint8_t out_b =
+              static_cast<uint8_t>(src_b * alpha + dst_b * (1.0f - alpha));
+          uint8_t out_a = 0xFF; // Output alpha can be set as needed
+
+          pixels[transformed_y * WIDTH + transformed_x] =
+              (out_r << 24) | (out_g << 16) | (out_b << 8) | out_a;
         }
       }
     }
