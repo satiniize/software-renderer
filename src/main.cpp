@@ -1,11 +1,76 @@
 #include <SDL3/SDL.h>
+#include <fstream>
 #include <stdint.h>
 #include <string.h>
 
 #define WIDTH 160
 #define HEIGHT 90
 
+// little endian
+void write_u16(std::ofstream &out, uint16_t val) {
+  out.put(val & 0xFF);
+  out.put((val >> 8) & 0xFF);
+}
+
+// little endian
+void write_u32(std::ofstream &out, uint32_t val) {
+  out.put(val & 0xFF);
+  out.put((val >> 8) & 0xFF);
+  out.put((val >> 16) & 0xFF);
+  out.put((val >> 24) & 0xFF);
+}
+
 int main(int argc, char *argv[]) {
+  int image_width = 16;
+  int image_height = 16;
+
+  int row_size = ((image_width * 3 + 3) / 4) * 4;
+  int padding = row_size - image_width * 3;
+  int image_size = row_size * image_height;
+  int file_size = 14 + 40 + image_size;
+
+  std::ofstream out("test_image.bmp", std::ios::binary);
+
+  // BMP File Header (14 bytes)
+  write_u16(out, 0x4D42);    // bfType
+  write_u32(out, file_size); // bfSize
+  write_u16(out, 0);         // bfReserved1
+  write_u16(out, 0);         // bfReserved2
+  write_u32(out, 54);        // bfOffBits
+
+  // DIB Header (BITMAPINFOHEADER, 40 bytes)
+  write_u32(out, 40);           // biSize
+  write_u32(out, image_width);  // biWidth
+  write_u32(out, image_height); // biHeight
+  write_u16(out, 1);            // biPlanes
+  write_u16(out, 24);           // biBitCount
+  write_u32(out, 0);            // biCompression
+  write_u32(out, image_size);   // biSizeImage
+  write_u32(out, 2835);         // biXPelsPerMeter
+  write_u32(out, 2835);         // biYPelsPerMeter
+  write_u32(out, 0);            // biClrUsed
+  write_u32(out, 0);            // biClrImportant
+
+  // For each row (bottom-up for BMP)
+  for (int y = 0; y < image_height; ++y) {
+    // Write each pixel in the row
+    for (int x = 0; x < image_width; ++x) {
+      out.put(0); // Blue
+      out.put(static_cast<int>(static_cast<float>(y) /
+                               static_cast<float>(image_height) *
+                               255.0f)); // Green
+      out.put(static_cast<int>(static_cast<float>(x) /
+                               static_cast<float>(image_width) *
+                               255.0f)); // Red
+    }
+    // Write padding bytes (if any)
+    for (int p = 0; p < padding; ++p) {
+      out.put(0);
+    }
+  }
+
+  out.close();
+
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
     SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
     return 1;
