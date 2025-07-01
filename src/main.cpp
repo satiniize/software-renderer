@@ -1,4 +1,3 @@
-#include "bitmap.h"
 #include <SDL3/SDL.h>
 #include <cmath>
 #include <cstdint>
@@ -7,12 +6,11 @@
 #include <string>
 #include <vector>
 
-#define WIDTH 160
-#define HEIGHT 90
+#define WIDTH 320
+#define HEIGHT 180
 
+#include "bitmap.h"
 #include "vec2i.h"
-
-// (BMP read/write helpers moved to bitmap.cpp)
 
 int main(int argc, char *argv[]) {
   std::string image_file_name_write = "test_image_write.bmp";

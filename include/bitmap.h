@@ -39,5 +39,3 @@ private:
   int height_;
   std::vector<uint32_t> pixels_; // RGBA8888 format (0xRRGGBBAA)
 };
-
-// (No free functions; use Bitmap::load and Bitmap::dump)
