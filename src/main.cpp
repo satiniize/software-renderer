@@ -1,3 +1,4 @@
+#include "bitmap.h"
 #include <SDL3/SDL.h>
 #include <cmath>
 #include <cstdint>
@@ -12,33 +13,7 @@
 
 #include "vec2i.h"
 
-// little endian
-void write_u16(std::ofstream &out, uint16_t val) {
-  out.put(val & 0xFF);
-  out.put((val >> 8) & 0xFF);
-}
-
-// little endian
-void write_u32(std::ofstream &out, uint32_t val) {
-  out.put(val & 0xFF);
-  out.put((val >> 8) & 0xFF);
-  out.put((val >> 16) & 0xFF);
-  out.put((val >> 24) & 0xFF);
-}
-
-uint16_t read_u16(std::ifstream &in) {
-  uint8_t b0 = in.get();
-  uint8_t b1 = in.get();
-  return (b1 << 8) | b0;
-}
-
-uint32_t read_u32(std::ifstream &in) {
-  uint8_t b0 = in.get();
-  uint8_t b1 = in.get();
-  uint8_t b2 = in.get();
-  uint8_t b3 = in.get();
-  return (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
-}
+// (BMP read/write helpers moved to bitmap.cpp)
 
 int main(int argc, char *argv[]) {
   std::string image_file_name_write = "test_image_write.bmp";
@@ -47,96 +22,43 @@ int main(int argc, char *argv[]) {
   int image_width = 16;
   int image_height = 16;
 
-  int row_size = ((image_width * 3 + 3) / 4) * 4;
-  int padding = row_size - image_width * 3;
-  int image_size = row_size * image_height;
-  int file_size = 14 + 40 + image_size;
-
-  std::ofstream out(image_file_name_write, std::ios::binary);
-
-  // BMP File Header (14 bytes)
-  write_u16(out, 0x4D42);    // bfType
-  write_u32(out, file_size); // bfSize
-  write_u16(out, 0);         // bfReserved1
-  write_u16(out, 0);         // bfReserved2
-  write_u32(out, 54);        // bfOffBits
-
-  // DIB Header (BITMAPINFOHEADER, 40 bytes)
-  write_u32(out, 40);           // biSize
-  write_u32(out, image_width);  // biWidth
-  write_u32(out, image_height); // biHeight
-  write_u16(out, 1);            // biPlanes
-  write_u16(out, 24);           // biBitCount
-  write_u32(out, 0);            // biCompression
-  write_u32(out, image_size);   // biSizeImage
-  write_u32(out, 2835);         // biXPelsPerMeter
-  write_u32(out, 2835);         // biYPelsPerMeter
-  write_u32(out, 0);            // biClrUsed
-  write_u32(out, 0);            // biClrImportant
-
-  // For each row (bottom-up for BMP)
+  // Create a test image (gradient)
+  Bitmap bmp_write;
+  bmp_write.width = image_width;
+  bmp_write.height = image_height;
+  bmp_write.pixels.resize(image_width * image_height);
   for (int y = 0; y < image_height; ++y) {
-    // Write each pixel in the row
     for (int x = 0; x < image_width; ++x) {
-      out.put(0); // Blue
-      out.put(static_cast<int>(static_cast<float>(y) /
-                               static_cast<float>(image_height) *
-                               255.0f)); // Green
-      out.put(static_cast<int>(static_cast<float>(x) /
-                               static_cast<float>(image_width) *
-                               255.0f)); // Red
-    }
-    // Write padding bytes (if any)
-    for (int p = 0; p < padding; ++p) {
-      out.put(0);
+      uint8_t r =
+          static_cast<int>(static_cast<float>(x) / image_width * 255.0f);
+      uint8_t g =
+          static_cast<int>(static_cast<float>(y) / image_height * 255.0f);
+      uint8_t b = 0;
+      bmp_write.pixels[y * image_width + x] =
+          (r << 24) | (g << 16) | (b << 8) | 0xFF;
     }
   }
 
-  // Write to file
-  out.close();
+  // Write BMP file
+  if (!write_bitmap(image_file_name_write, bmp_write)) {
+    std::cerr << "Failed to write BMP file.\n";
+    return 1;
+  }
 
-  // Open written file for reading
-  std::ifstream image_texture(image_file_name_read, std::ios::binary);
-  if (!image_texture) {
+  // Read BMP file
+  Bitmap bmp_read;
+  if (!read_bitmap(image_file_name_read, bmp_read)) {
     std::cerr << "Failed to open image file.\n";
     return 1;
   }
 
-  image_texture.seekg(10, std::ios::beg);
-  uint32_t pixel_data_offset = read_u32(image_texture);
-  image_texture.seekg(18, std::ios::beg);
-  uint32_t bmp_width = read_u32(image_texture);
-  uint32_t bmp_height = read_u32(image_texture);
-  image_texture.seekg(28, std::ios::beg);
-  uint32_t bit_depth = read_u16(image_texture);
+  std::cout << "Width: " << bmp_read.width << std::endl;
+  std::cout << "Height: " << bmp_read.height << std::endl;
+  std::cout << "Pixels: " << bmp_read.pixels.size() << std::endl;
 
-  std::cout << "Pixel data offset: " << pixel_data_offset << std::endl;
-  std::cout << "Width: " << bmp_width << std::endl;
-  std::cout << "Height: " << bmp_height << std::endl;
-  std::cout << "Bit depth: " << bit_depth << std::endl;
-
-  int bytes_per_pixel = bit_depth / 8; // This assumes 8 8 8 BGR
-  std::vector<uint32_t> texture_pixels(bmp_width * bmp_height);
-
-  image_texture.seekg(pixel_data_offset, std::ios::beg);
-
-  for (int y = 0; y < bmp_height; ++y) {
-    int bmp_y = bmp_height - 1 - y; // BMP is bottom-up
-    for (int x = 0; x < bmp_width; ++x) {
-      char pixel_buffer[3];
-      image_texture.read(pixel_buffer, bytes_per_pixel);
-      unsigned char blue = pixel_buffer[0];
-      unsigned char green = pixel_buffer[1];
-      unsigned char red = pixel_buffer[2];
-      unsigned char alpha = (red == 255 && blue == 255) ? 0x00 : 0xFF;
-      texture_pixels[bmp_y * bmp_width + x] =
-          (red << 24) | (green << 16) | (blue << 8) | alpha;
-    }
-    // Skip row padding
-    int row_size = ((bmp_width * 3 + 3) / 4) * 4;
-    int padding = row_size - bmp_width * 3;
-    image_texture.ignore(padding);
-  }
+  int bmp_width = bmp_read.width;
+  int bmp_height = bmp_read.height;
+  std::vector<uint32_t> texture_pixels = bmp_read.pixels;
 
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
     SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());

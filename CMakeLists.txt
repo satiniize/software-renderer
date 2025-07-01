@@ -9,8 +9,15 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
 # This assumes the SDL source is available in lib/SDL (as a submodule)
 add_subdirectory(lib/SDL EXCLUDE_FROM_ALL)
 
+# Source files for the project
+set(SR_SOURCES
+				src/main.cpp
+				src/vec2i.cpp
+				src/bitmap.cpp
+)
+
 # Create your game executable target as usual
-add_executable(software-renderer src/main.cpp src/vec2i.cpp)
+add_executable(software-renderer ${SR_SOURCES})
 target_include_directories(software-renderer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Link to the actual SDL3 library.
