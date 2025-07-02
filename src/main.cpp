@@ -1,9 +1,7 @@
 #include <SDL3/SDL.h>
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
-#include <stdint.h>
 #include <string>
 #include <vector>
 
@@ -17,22 +15,6 @@
 #include "sprite_system.h"
 #include "transform_component.h"
 #include "vec2.h"
-#include "vec2i.h"
-
-vec2 calculate_rendering_aabb_top_left(vec2 top_left, vec2 top_right,
-                                       vec2 bottom_left, vec2 bottom_right) {
-  return vec2(
-      std::min({top_left.x, top_right.x, bottom_left.x, bottom_right.x}),
-      std::min({top_left.y, top_right.y, bottom_left.y, bottom_right.y}));
-}
-
-vec2 calculate_rendering_aabb_bottom_right(vec2 top_left, vec2 top_right,
-                                           vec2 bottom_left,
-                                           vec2 bottom_right) {
-  return vec2(
-      std::max({top_left.x, top_right.x, bottom_left.x, bottom_right.x}),
-      std::max({top_left.y, top_right.y, bottom_left.y, bottom_right.y}));
-}
 
 int main(int argc, char *argv[]) {
   std::string bitmap_write_name = "test_image_write.bmp";
@@ -228,12 +210,6 @@ int main(int argc, char *argv[]) {
       bounce_direction.y *= -1.0f;
       collided = true;
     }
-
-    // Recalculate sprite rendering AABB after collision adjustment
-    // (This would be handled by a system in a full ECS, but for now, update the
-    // component) We'll just zero the AABB for now; a system should update it.
-    spriteComponents[amogus].aabb_top_left = vec2(0, 0);
-    spriteComponents[amogus].aabb_bottom_right = vec2(0, 0);
 
     // --- Software rendering: fill the pixel buffer (checkerboard) ---
     int checker_size = 1;
