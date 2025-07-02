@@ -11,34 +11,9 @@
 #define HEIGHT 180
 
 #include "bitmap.h"
+#include "transform.h"
 #include "vec2.h"
 #include "vec2i.h"
-
-vec2 transform(vec2 x_axis, vec2 y_axis, vec2 origin, vec2 point) {
-  return vec2(x_axis.x * point.x + y_axis.x * point.y + origin.x,
-              x_axis.y * point.x + y_axis.y * point.y + origin.y);
-}
-
-vec2 inverse_transform(vec2 x_axis, vec2 y_axis, vec2 origin,
-                       vec2 transformed_point) {
-  // Step 1: Subtract the origin
-  float px = transformed_point.x - origin.x;
-  float py = transformed_point.y - origin.y;
-
-  // Step 2: Compute the determinant
-  float det = x_axis.x * y_axis.y - x_axis.y * y_axis.x;
-  if (fabs(det) < 1e-8) {
-    // Handle singular matrix (no inverse)
-    return vec2(0, 0); // Or handle error as needed
-  }
-  float inv_det = 1.0f / det;
-
-  // Step 3: Apply the inverse matrix
-  float x = (y_axis.y * px - y_axis.x * py) * inv_det;
-  float y = (-x_axis.y * px + x_axis.x * py) * inv_det;
-
-  return vec2(x, y);
-}
 
 int main(int argc, char *argv[]) {
   std::string image_file_name_write = "test_image_write.bmp";
@@ -133,10 +108,8 @@ int main(int argc, char *argv[]) {
       if (event.type == SDL_EVENT_QUIT) {
         running = false;
       }
-      // No need to handle keydown for movement here
     }
 
-    // --- Smooth, game-like WASD movement ---
     const bool *keystate = SDL_GetKeyboardState(NULL);
     float speed = 0.1f;
     if (keystate[SDL_SCANCODE_W]) {
@@ -162,8 +135,6 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    float rotation = 0.0f;
-
     int ticks = SDL_GetTicks();
 
     float sine = std::sin(float(ticks) / 256.0f);
@@ -173,20 +144,21 @@ int main(int argc, char *argv[]) {
     // float sine = 0.0f;
     // float cosine = 1.0f;
 
-    // Transform matrix
-    vec2 x_axis = vec2(cosine, -sine); // Initially faces right, rotates CCW
-    vec2 y_axis = vec2(sine, cosine);  // Initially faces down, rotates CCW
-    vec2 origin = vec2((WIDTH / 2), (HEIGHT / 2)) + position;
+    // Set up the transform object
+    transform sprite_transform;
+    sprite_transform.set_x_basis(vec2(cosine, -sine)); // x_axis
+    sprite_transform.set_y_basis(vec2(sine, cosine));  // y_axis
+    sprite_transform.set_origin(vec2((WIDTH / 2), (HEIGHT / 2)) + position);
 
-    // Transformed sprite corners
-    vec2 top_left = transform(x_axis, y_axis, origin,
-                              vec2(-bmp_width / 2.0f, -bmp_height / 2.0f));
-    vec2 top_right = transform(x_axis, y_axis, origin,
-                               vec2(bmp_width / 2.0f, -bmp_height / 2.0f));
-    vec2 bottom_left = transform(x_axis, y_axis, origin,
-                                 vec2(-bmp_width / 2.0f, bmp_height / 2.0f));
-    vec2 bottom_right = transform(x_axis, y_axis, origin,
-                                  vec2(bmp_width / 2.0f, bmp_height / 2.0f));
+    // Transformed sprite corners using the transform object
+    vec2 top_left =
+        sprite_transform * vec2(-bmp_width / 2.0f, -bmp_height / 2.0f);
+    vec2 top_right =
+        sprite_transform * vec2(bmp_width / 2.0f, -bmp_height / 2.0f);
+    vec2 bottom_left =
+        sprite_transform * vec2(-bmp_width / 2.0f, bmp_height / 2.0f);
+    vec2 bottom_right =
+        sprite_transform * vec2(bmp_width / 2.0f, bmp_height / 2.0f);
 
     vec2 aabb_top_left = vec2(
         std::min({top_left.x, top_right.x, bottom_left.x, bottom_right.x}),
@@ -199,7 +171,7 @@ int main(int argc, char *argv[]) {
          y < static_cast<int>(std::ceil(aabb_bottom_right.y)); ++y) {
       for (int x = static_cast<int>(std::floor(aabb_top_left.x));
            x < static_cast<int>(std::ceil(aabb_bottom_right.x)); ++x) {
-        vec2 tex_coords = inverse_transform(x_axis, y_axis, origin, vec2(x, y));
+        vec2 tex_coords = sprite_transform.inverse_transform(vec2(x, y));
 
         // Plus half sprite size to move origin from center to top left
         int u = static_cast<int>(std::round(tex_coords.x + bmp_width / 2.0f));

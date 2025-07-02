@@ -14,6 +14,7 @@ set(SR_SOURCES
 				src/main.cpp
 				src/vec2i.cpp
 				src/vec2.cpp
+				src/transform.cpp
 				src/bitmap.cpp
 )
 
