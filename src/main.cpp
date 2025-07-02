@@ -1,4 +1,5 @@
 #include <SDL3/SDL.h>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
@@ -10,7 +11,34 @@
 #define HEIGHT 180
 
 #include "bitmap.h"
+#include "vec2.h"
 #include "vec2i.h"
+
+vec2 transform(vec2 x_axis, vec2 y_axis, vec2 origin, vec2 point) {
+  return vec2(x_axis.x * point.x + y_axis.x * point.y + origin.x,
+              x_axis.y * point.x + y_axis.y * point.y + origin.y);
+}
+
+vec2 inverse_transform(vec2 x_axis, vec2 y_axis, vec2 origin,
+                       vec2 transformed_point) {
+  // Step 1: Subtract the origin
+  float px = transformed_point.x - origin.x;
+  float py = transformed_point.y - origin.y;
+
+  // Step 2: Compute the determinant
+  float det = x_axis.x * y_axis.y - x_axis.y * y_axis.x;
+  if (fabs(det) < 1e-8) {
+    // Handle singular matrix (no inverse)
+    return vec2(0, 0); // Or handle error as needed
+  }
+  float inv_det = 1.0f / det;
+
+  // Step 3: Apply the inverse matrix
+  float x = (y_axis.y * px - y_axis.x * py) * inv_det;
+  float y = (-x_axis.y * px + x_axis.x * py) * inv_det;
+
+  return vec2(x, y);
+}
 
 int main(int argc, char *argv[]) {
   std::string image_file_name_write = "test_image_write.bmp";
@@ -99,7 +127,7 @@ int main(int argc, char *argv[]) {
   while (running) {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
-      if (event.type == SDL_EVENT_QUIT || event.type == SDL_EVENT_KEY_DOWN) {
+      if (event.type == SDL_EVENT_QUIT) {
         running = false;
       }
     }
@@ -109,25 +137,57 @@ int main(int argc, char *argv[]) {
     for (int y = 0; y < HEIGHT; ++y) {
       for (int x = 0; x < WIDTH; ++x) {
         int checker = ((x / checker_size) + (y / checker_size)) % 2;
-        uint8_t v = checker ? 255 : 0;
+        uint8_t v = checker ? 192 : 128;
         pixels[y * WIDTH + x] = (v << 24) | (v << 16) | (v << 8) | 0xFF;
       }
     }
 
-    for (int y = 0; y < bmp_height; ++y) {
-      for (int x = 0; x < bmp_width; ++x) {
-        int ticks = SDL_GetTicks();
-        vec2i offset = vec2i(-(bmp_width / 2) + (WIDTH / 2) +
-                                 32.0 * std::sin(float(ticks) / 1000.0f),
-                             -(bmp_height / 2) + (HEIGHT / 2) +
-                                 32.0 * std::cos(float(ticks) / 1000.0f));
-        int transformed_x = x + offset.x;
-        int transformed_y = y + offset.y;
-        bool within_bounds = (transformed_x >= 0) && (transformed_x < WIDTH) &&
-                             (transformed_y >= 0) && (transformed_y < HEIGHT);
+    float rotation = 0.0f;
+
+    int ticks = SDL_GetTicks();
+
+    float sine = std::sin(float(ticks) / 256.0f);
+    float cosine = std::cos(float(ticks) / 256.0f);
+
+    // No rotation
+    // float sine = 0.0f;
+    // float cosine = 1.0f;
+
+    // Transform matrix
+    vec2 x_axis = vec2(cosine, -sine); // Initially faces right, rotates CCW
+    vec2 y_axis = vec2(sine, cosine);  // Initially faces down, rotates CCW
+    vec2 origin = vec2((WIDTH / 2), (HEIGHT / 2));
+
+    // Transformed sprite corners
+    vec2 top_left = transform(x_axis, y_axis, origin,
+                              vec2(-bmp_width / 2.0f, -bmp_height / 2.0f));
+    vec2 top_right = transform(x_axis, y_axis, origin,
+                               vec2(bmp_width / 2.0f, -bmp_height / 2.0f));
+    vec2 bottom_left = transform(x_axis, y_axis, origin,
+                                 vec2(-bmp_width / 2.0f, bmp_height / 2.0f));
+    vec2 bottom_right = transform(x_axis, y_axis, origin,
+                                  vec2(bmp_width / 2.0f, bmp_height / 2.0f));
+
+    vec2 aabb_top_left = vec2(
+        std::min({top_left.x, top_right.x, bottom_left.x, bottom_right.x}),
+        std::min({top_left.y, top_right.y, bottom_left.y, bottom_right.y}));
+    vec2 aabb_bottom_right = vec2(
+        std::max({top_left.x, top_right.x, bottom_left.x, bottom_right.x}),
+        std::max({top_left.y, top_right.y, bottom_left.y, bottom_right.y}));
+
+    for (int y = static_cast<int>(std::floor(aabb_top_left.y));
+         y < static_cast<int>(std::ceil(aabb_bottom_right.y)); ++y) {
+      for (int x = static_cast<int>(std::floor(aabb_top_left.x));
+           x < static_cast<int>(std::ceil(aabb_bottom_right.x)); ++x) {
+        // vec2 point = vec2(x - bmp_width / 2, y - bmp_height / 2);
+        vec2 tex_coords = inverse_transform(x_axis, y_axis, origin, vec2(x, y));
+        int u = static_cast<int>(std::round(tex_coords.x + bmp_width / 2.0f));
+        int v = static_cast<int>(std::round(tex_coords.y + bmp_height / 2.0f));
+        bool within_bounds =
+            (u >= 0) && (u < bmp_width) && (v >= 0) && (v < bmp_height);
         if (within_bounds) {
-          uint32_t src = texture_pixels[y * bmp_width + x];
-          uint32_t dst = pixels[transformed_y * WIDTH + transformed_x];
+          uint32_t src = texture_pixels[v * bmp_width + u];
+          uint32_t dst = pixels[y * WIDTH + x];
 
           uint8_t src_r = (src >> 24) & 0xFF;
           uint8_t src_g = (src >> 16) & 0xFF;
@@ -149,7 +209,7 @@ int main(int argc, char *argv[]) {
               static_cast<uint8_t>(src_b * alpha + dst_b * (1.0f - alpha));
           uint8_t out_a = 0xFF; // Output alpha can be set as needed
 
-          pixels[transformed_y * WIDTH + transformed_x] =
+          pixels[y * WIDTH + x] =
               (out_r << 24) | (out_g << 16) | (out_b << 8) | out_a;
         }
       }

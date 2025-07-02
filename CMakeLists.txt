@@ -13,6 +13,7 @@ add_subdirectory(lib/SDL EXCLUDE_FROM_ALL)
 set(SR_SOURCES
 				src/main.cpp
 				src/vec2i.cpp
+				src/vec2.cpp
 				src/bitmap.cpp
 )
 
