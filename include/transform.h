@@ -6,6 +6,7 @@
 
 class transform {
 public:
+  transform();
   void set_element(int row, int col, int value);
   float get_element(int row, int col) const;
   void set_x_basis(vec2 basis);

@@ -1,5 +1,14 @@
 #include "transform.h"
 
+transform::transform() {
+  cells[0] = 1.0f;
+  cells[1] = 0.0f;
+  cells[2] = 0.0f;
+  cells[3] = 0.0f;
+  cells[4] = 1.0f;
+  cells[5] = 0.0f;
+}
+
 // Set the value at (row, col)
 void transform::set_element(int row, int col, int value) {
   if (row < 0 || row > 1 || col < 0 || col > 2)

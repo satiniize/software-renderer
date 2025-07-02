@@ -24,10 +24,9 @@ public:
   bool dump(const std::string &path) const;
 
   // Getters
-  int width() const { return width_; }
-  int height() const { return height_; }
-  const std::vector<uint32_t> &pixels() const { return pixels_; }
-  std::vector<uint32_t> &pixels() { return pixels_; }
+  int get_width() const { return width_; }
+  int get_height() const { return height_; }
+  const std::vector<uint32_t> &get_pixels() const { return pixels_; }
 
   // Set a pixel at (x, y) to value (no bounds check)
   void set_pixel(int x, int y, uint32_t value) {
