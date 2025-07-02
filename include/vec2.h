@@ -6,6 +6,8 @@ public:
   vec2(float x, float y);
   float x;
   float y;
+
+  vec2 operator+(const vec2 &other) const;
 };
 
 #endif // VEC2_H

@@ -124,12 +124,32 @@ int main(int argc, char *argv[]) {
   uint32_t pixels[WIDTH * HEIGHT];
 
   bool running = true;
+
+  vec2 position = vec2(0.0f, 0.0f);
+
   while (running) {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_EVENT_QUIT) {
         running = false;
       }
+      // No need to handle keydown for movement here
+    }
+
+    // --- Smooth, game-like WASD movement ---
+    const bool *keystate = SDL_GetKeyboardState(NULL);
+    float speed = 0.1f;
+    if (keystate[SDL_SCANCODE_W]) {
+      position = position + vec2(0.0f, -speed);
+    }
+    if (keystate[SDL_SCANCODE_A]) {
+      position = position + vec2(-speed, 0.0f);
+    }
+    if (keystate[SDL_SCANCODE_S]) {
+      position = position + vec2(0.0f, speed);
+    }
+    if (keystate[SDL_SCANCODE_D]) {
+      position = position + vec2(speed, 0.0f);
     }
 
     // --- Software rendering: fill the pixel buffer (checkerboard) ---
@@ -156,7 +176,7 @@ int main(int argc, char *argv[]) {
     // Transform matrix
     vec2 x_axis = vec2(cosine, -sine); // Initially faces right, rotates CCW
     vec2 y_axis = vec2(sine, cosine);  // Initially faces down, rotates CCW
-    vec2 origin = vec2((WIDTH / 2), (HEIGHT / 2));
+    vec2 origin = vec2((WIDTH / 2), (HEIGHT / 2)) + position;
 
     // Transformed sprite corners
     vec2 top_left = transform(x_axis, y_axis, origin,
@@ -179,7 +199,6 @@ int main(int argc, char *argv[]) {
          y < static_cast<int>(std::ceil(aabb_bottom_right.y)); ++y) {
       for (int x = static_cast<int>(std::floor(aabb_top_left.x));
            x < static_cast<int>(std::ceil(aabb_bottom_right.x)); ++x) {
-        // vec2 point = vec2(x - bmp_width / 2, y - bmp_height / 2);
         vec2 tex_coords = inverse_transform(x_axis, y_axis, origin, vec2(x, y));
 
         // Plus half sprite size to move origin from center to top left
@@ -188,7 +207,9 @@ int main(int argc, char *argv[]) {
 
         bool within_bounds =
             (u >= 0) && (u < bmp_width) && (v >= 0) && (v < bmp_height);
-        if (within_bounds) {
+        bool within_screen =
+            (x >= 0) && (x < WIDTH) && (y >= 0) && (y < HEIGHT);
+        if (within_bounds && within_screen) {
           uint32_t src = texture_pixels[v * bmp_width + u];
           uint32_t dst = pixels[y * WIDTH + x];
 
