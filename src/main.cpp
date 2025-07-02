@@ -76,6 +76,19 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  SDL_GPUDevice *device =
+      SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL);
+  SDL_ClaimWindowForGPUDevice(device, window);
+
+  SDL_GPUCommandBuffer *commandBuffer = SDL_AcquireGPUCommandBuffer(device);
+
+  SDL_SubmitGPUCommandBuffer(commandBuffer);
+
+  // SDL_GPUTextureCreateInfo *gpu_texture_create_info;
+
+  // SDL_GPUTexture *gpu_texture =
+  //     SDL_CreateGPUTexture(device, gpu_texture_create_info);
+
   SDL_Renderer *renderer = SDL_CreateRenderer(window, NULL);
   if (!renderer) {
     SDL_Log("Couldn't create renderer: %s", SDL_GetError());
@@ -101,6 +114,7 @@ int main(int argc, char *argv[]) {
   bool running = true;
 
   vec2 position = vec2(0.0f, 0.0f);
+  vec2 auto_direction = vec2(1.0f, 1.0f);
 
   while (running) {
     SDL_Event event;
@@ -123,6 +137,18 @@ int main(int argc, char *argv[]) {
     }
     if (keystate[SDL_SCANCODE_D]) {
       position = position + vec2(speed, 0.0f);
+    }
+
+    position = position + auto_direction * 0.1f;
+    if (position.x > WIDTH) {
+      auto_direction.x = -1.0f;
+    } else if (position.x < 0) {
+      auto_direction.x = 1.0f;
+    }
+    if (position.y > HEIGHT) {
+      auto_direction.y = -1.0f;
+    } else if (position.y < 0) {
+      auto_direction.y = 1.0f;
     }
 
     // --- Software rendering: fill the pixel buffer (checkerboard) ---
@@ -148,7 +174,7 @@ int main(int argc, char *argv[]) {
     transform sprite_transform;
     sprite_transform.set_x_basis(vec2(cosine, -sine)); // x_axis
     sprite_transform.set_y_basis(vec2(sine, cosine));  // y_axis
-    sprite_transform.set_origin(vec2((WIDTH / 2), (HEIGHT / 2)) + position);
+    sprite_transform.set_origin(position);
 
     // Transformed sprite corners using the transform object
     vec2 top_left =
@@ -233,7 +259,7 @@ int main(int argc, char *argv[]) {
       fps_last_time = now;
     }
   }
-
+  SDL_DestroyGPUDevice(device);
   SDL_DestroyTexture(texture);
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);

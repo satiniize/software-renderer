@@ -8,6 +8,7 @@ public:
   float y;
 
   vec2 operator+(const vec2 &other) const;
+  vec2 operator*(float scalar) const;
 };
 
 #endif // VEC2_H
