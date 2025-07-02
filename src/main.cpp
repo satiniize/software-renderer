@@ -181,8 +181,11 @@ int main(int argc, char *argv[]) {
            x < static_cast<int>(std::ceil(aabb_bottom_right.x)); ++x) {
         // vec2 point = vec2(x - bmp_width / 2, y - bmp_height / 2);
         vec2 tex_coords = inverse_transform(x_axis, y_axis, origin, vec2(x, y));
+
+        // Plus half sprite size to move origin from center to top left
         int u = static_cast<int>(std::round(tex_coords.x + bmp_width / 2.0f));
         int v = static_cast<int>(std::round(tex_coords.y + bmp_height / 2.0f));
+
         bool within_bounds =
             (u >= 0) && (u < bmp_width) && (v >= 0) && (v < bmp_height);
         if (within_bounds) {
