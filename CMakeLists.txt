@@ -11,11 +11,12 @@ add_subdirectory(lib/SDL EXCLUDE_FROM_ALL)
 
 # Source files for the project
 set(SR_SOURCES
-				src/main.cpp
-				src/vec2i.cpp
-				src/vec2.cpp
-				src/transform.cpp
-				src/bitmap.cpp
+	src/bitmap.cpp
+	src/main.cpp
+	src/sprite.cpp
+	src/transform.cpp
+	src/vec2.cpp
+	src/vec2i.cpp
 )
 
 # Create your game executable target as usual

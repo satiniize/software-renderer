@@ -3,6 +3,7 @@
 
 class vec2 {
 public:
+  vec2();
   vec2(float x, float y);
   float x;
   float y;

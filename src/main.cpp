@@ -11,6 +11,7 @@
 #define HEIGHT 180
 
 #include "bitmap.h"
+#include "sprite.h"
 #include "transform.h"
 #include "vec2.h"
 #include "vec2i.h"
@@ -126,32 +127,14 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  vec2 sprite_position = vec2(0.0f, 0.0f);
-  transform sprite_transform;
-
-  float sprite_x_extents = bitmap_read_width / 2.0f;
-  float sprite_y_extents = bitmap_read_height / 2.0f;
-
-  vec2 sprite_vertex_top_left =
-      sprite_transform * vec2(-sprite_x_extents, -sprite_y_extents);
-  vec2 sprite_vertex_top_right =
-      sprite_transform * vec2(sprite_x_extents, -sprite_y_extents);
-  vec2 sprite_vertex_bottom_left =
-      sprite_transform * vec2(-sprite_x_extents, sprite_y_extents);
-  vec2 sprite_vertex_bottom_right =
-      sprite_transform * vec2(sprite_x_extents, sprite_y_extents);
-
-  vec2 rendering_aabb_top_left = calculate_rendering_aabb_top_left(
-      sprite_vertex_top_left, sprite_vertex_top_right,
-      sprite_vertex_bottom_left, sprite_vertex_bottom_right);
-
-  vec2 rendering_aabb_bottom_right = calculate_rendering_aabb_bottom_right(
-      sprite_vertex_top_left, sprite_vertex_top_right,
-      sprite_vertex_bottom_left, sprite_vertex_bottom_right);
-
+  Sprite amogus;
+  amogus.bitmap = bmp_read;
+  amogus.size = vec2(static_cast<float>(bitmap_read_width),
+                     static_cast<float>(bitmap_read_height));
+  amogus.position = vec2(0.0f, 0.0f);
+  amogus.transform = Transform();
   vec2 physics_aabb_top_left = vec2(-4.0f, -4.0f);
   vec2 physics_aabb_bottom_right = vec2(4.0f, 4.0f);
-
   vec2 bounce_direction = vec2(1.0f, 1.0f);
 
   // Software buffer for screen pixels
@@ -176,99 +159,63 @@ int main(int argc, char *argv[]) {
     // WASD Movement
     float speed = 0.1f;
     if (keystate[SDL_SCANCODE_W]) {
-      sprite_position = sprite_position + vec2(0.0f, -speed);
+      amogus.position = amogus.position + vec2(0.0f, -speed);
     }
     if (keystate[SDL_SCANCODE_A]) {
-      sprite_position = sprite_position + vec2(-speed, 0.0f);
+      amogus.position = amogus.position + vec2(-speed, 0.0f);
     }
     if (keystate[SDL_SCANCODE_S]) {
-      sprite_position = sprite_position + vec2(0.0f, speed);
+      amogus.position = amogus.position + vec2(0.0f, speed);
     }
     if (keystate[SDL_SCANCODE_D]) {
-      sprite_position = sprite_position + vec2(speed, 0.0f);
+      amogus.position = amogus.position + vec2(speed, 0.0f);
     }
 
     // DVD logo integration
-    sprite_position = sprite_position + bounce_direction * 0.05f;
+    amogus.position = amogus.position + bounce_direction * 0.05f;
 
     int ticks = SDL_GetTicks();
     float sine = std::sin(float(ticks) / 256.0f);
     float cosine = std::cos(float(ticks) / 256.0f);
 
-    // Set up the transform object
-    sprite_transform.set_x_basis(vec2(cosine, -sine)); // x_axis
-    sprite_transform.set_y_basis(vec2(sine, cosine));  // y_axis
-    sprite_transform.set_origin(sprite_position);
+    // Set up the transform object for the sprite
+    Transform t;
+    t.set_x_basis(vec2(cosine, -sine)); // x_axis
+    t.set_y_basis(vec2(sine, cosine));  // y_axis
+    t.set_origin(amogus.position);
+    amogus.set_transform(t);
 
-    // Transformed sprite corners using the transform object
-    sprite_vertex_top_left =
-        sprite_transform * vec2(-sprite_x_extents, -sprite_y_extents);
-    sprite_vertex_top_right =
-        sprite_transform * vec2(sprite_x_extents, -sprite_y_extents);
-    sprite_vertex_bottom_left =
-        sprite_transform * vec2(-sprite_x_extents, sprite_y_extents);
-    sprite_vertex_bottom_right =
-        sprite_transform * vec2(sprite_x_extents, sprite_y_extents);
-
-    rendering_aabb_top_left = calculate_rendering_aabb_top_left(
-        sprite_vertex_top_left, sprite_vertex_top_right,
-        sprite_vertex_bottom_left, sprite_vertex_bottom_right);
-
-    rendering_aabb_bottom_right = calculate_rendering_aabb_bottom_right(
-        sprite_vertex_top_left, sprite_vertex_top_right,
-        sprite_vertex_bottom_left, sprite_vertex_bottom_right);
-
-    // --- AABB collision with screen edges (bounce) ---
-    // If collision, adjust sprite_position and reverse direction, then
-    // recalculate transform and AABB
+    // Recalculate transform and AABB
     vec2 transformed_physics_aabb_top_left =
-        physics_aabb_top_left + sprite_position;
-
+        physics_aabb_top_left + amogus.position;
     vec2 transformed_physics_aabb_bottom_right =
-        physics_aabb_bottom_right + sprite_position;
+        physics_aabb_bottom_right + amogus.position;
 
+    // Physics
     bool collided = false;
     if (transformed_physics_aabb_top_left.x < 0) {
-      sprite_position.x += -transformed_physics_aabb_top_left.x;
+      amogus.position.x += -transformed_physics_aabb_top_left.x;
       bounce_direction.x *= -1.0f;
       collided = true;
     }
     if (transformed_physics_aabb_bottom_right.x > WIDTH) {
-      sprite_position.x -= (transformed_physics_aabb_bottom_right.x - WIDTH);
+      amogus.position.x -= (transformed_physics_aabb_bottom_right.x - WIDTH);
       bounce_direction.x *= -1.0f;
       collided = true;
     }
     if (transformed_physics_aabb_top_left.y < 0) {
-      sprite_position.y += -transformed_physics_aabb_top_left.y;
+      amogus.position.y += -transformed_physics_aabb_top_left.y;
       bounce_direction.y *= -1.0f;
       collided = true;
     }
     if (transformed_physics_aabb_bottom_right.y > HEIGHT) {
-      sprite_position.y -= (transformed_physics_aabb_bottom_right.y - HEIGHT);
+      amogus.position.y -= (transformed_physics_aabb_bottom_right.y - HEIGHT);
       bounce_direction.y *= -1.0f;
       collided = true;
     }
-    if (collided) {
-      // Recalculate transform and AABB after collision adjustment
-      sprite_transform.set_origin(sprite_position);
 
-      sprite_vertex_top_left =
-          sprite_transform * vec2(-sprite_x_extents, -sprite_y_extents);
-      sprite_vertex_top_right =
-          sprite_transform * vec2(sprite_x_extents, -sprite_y_extents);
-      sprite_vertex_bottom_left =
-          sprite_transform * vec2(-sprite_x_extents, sprite_y_extents);
-      sprite_vertex_bottom_right =
-          sprite_transform * vec2(sprite_x_extents, sprite_y_extents);
-
-      rendering_aabb_top_left = calculate_rendering_aabb_top_left(
-          sprite_vertex_top_left, sprite_vertex_top_right,
-          sprite_vertex_bottom_left, sprite_vertex_bottom_right);
-
-      rendering_aabb_bottom_right = calculate_rendering_aabb_bottom_right(
-          sprite_vertex_top_left, sprite_vertex_top_right,
-          sprite_vertex_bottom_left, sprite_vertex_bottom_right);
-    }
+    // Recalculate sprite rendering AABB after collision adjustment
+    amogus.update_aabb();
 
     // --- Software rendering: fill the pixel buffer (checkerboard) ---
     int checker_size = 1;
@@ -280,53 +227,8 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // Draw sprite within sprite calculated AABB
-    for (int y = static_cast<int>(std::floor(rendering_aabb_top_left.y));
-         y < static_cast<int>(std::ceil(rendering_aabb_bottom_right.y)); ++y) {
-      for (int x = static_cast<int>(std::floor(rendering_aabb_top_left.x));
-           x < static_cast<int>(std::ceil(rendering_aabb_bottom_right.x));
-           ++x) {
-        vec2 tex_coords = sprite_transform.inverse_transform(vec2(x, y));
-
-        // Plus half sprite size to move origin from center to top left
-        int u = static_cast<int>(
-            std::round(tex_coords.x + bitmap_read_width / 2.0f));
-        int v = static_cast<int>(
-            std::round(tex_coords.y + bitmap_read_height / 2.0f));
-
-        bool within_bounds = (u >= 0) && (u < bitmap_read_width) && (v >= 0) &&
-                             (v < bitmap_read_height);
-        bool within_screen =
-            (x >= 0) && (x < WIDTH) && (y >= 0) && (y < HEIGHT);
-        if (within_bounds && within_screen) {
-          uint32_t src = bitmap_read_pixels[v * bitmap_read_width + u];
-          uint32_t dst = staging_buffer[y * WIDTH + x];
-
-          uint8_t src_r = (src >> 24) & 0xFF;
-          uint8_t src_g = (src >> 16) & 0xFF;
-          uint8_t src_b = (src >> 8) & 0xFF;
-          uint8_t src_a = src & 0xFF;
-
-          uint8_t dst_r = (dst >> 24) & 0xFF;
-          uint8_t dst_g = (dst >> 16) & 0xFF;
-          uint8_t dst_b = (dst >> 8) & 0xFF;
-          uint8_t dst_a = dst & 0xFF;
-
-          float alpha = src_a / 255.0f;
-
-          uint8_t out_r =
-              static_cast<uint8_t>(src_r * alpha + dst_r * (1.0f - alpha));
-          uint8_t out_g =
-              static_cast<uint8_t>(src_g * alpha + dst_g * (1.0f - alpha));
-          uint8_t out_b =
-              static_cast<uint8_t>(src_b * alpha + dst_b * (1.0f - alpha));
-          uint8_t out_a = 0xFF; // Output alpha can be set as needed
-
-          staging_buffer[y * WIDTH + x] =
-              (out_r << 24) | (out_g << 16) | (out_b << 8) | out_a;
-        }
-      }
-    }
+    // Draw sprite using Sprite's draw method
+    amogus.draw(staging_buffer, WIDTH, HEIGHT);
 
     // --- Upload pixel buffer to texture ---
     void *tex_pixels;
