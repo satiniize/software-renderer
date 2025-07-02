@@ -13,12 +13,8 @@ add_subdirectory(lib/SDL EXCLUDE_FROM_ALL)
 set(SR_SOURCES
 	src/bitmap.cpp
 	src/main.cpp
-	src/sprite.cpp
-	src/transform.cpp
 	src/vec2.cpp
 	src/vec2i.cpp
-	src/entity.cpp
-	src/component.cpp
 	src/sprite_system.cpp
 	)
 

@@ -1,5 +1,4 @@
-#ifndef VEC2I_H
-#define VEC2I_H
+#pragma once
 
 class vec2i {
 public:
@@ -7,5 +6,3 @@ public:
   int x;
   int y;
 };
-
-#endif // VEC2I_H

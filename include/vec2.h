@@ -1,5 +1,4 @@
-#ifndef VEC2_H
-#define VEC2_H
+#pragma once
 
 class vec2 {
 public:
@@ -11,5 +10,3 @@ public:
   vec2 operator+(const vec2 &other) const;
   vec2 operator*(float scalar) const;
 };
-
-#endif // VEC2_H
