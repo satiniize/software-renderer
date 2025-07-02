@@ -11,8 +11,11 @@
 #define HEIGHT 180
 
 #include "bitmap.h"
-#include "sprite.h"
-#include "transform.h"
+#include "component_storage.h"
+#include "entity_manager.h"
+#include "sprite_component.h"
+#include "sprite_system.h"
+#include "transform_component.h"
 #include "vec2.h"
 #include "vec2i.h"
 
@@ -127,12 +130,24 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  Sprite amogus;
-  amogus.bitmap = bmp_read;
-  amogus.size = vec2(static_cast<float>(bitmap_read_width),
-                     static_cast<float>(bitmap_read_height));
-  amogus.position = vec2(0.0f, 0.0f);
-  amogus.transform = Transform();
+  EntityManager entityManager;
+  EntityID amogus = entityManager.create();
+
+  // Add SpriteComponent to amogus
+  SpriteComponent spriteComp;
+  spriteComp.bitmap = bmp_read;
+  spriteComp.size = vec2(static_cast<float>(bitmap_read_width),
+                         static_cast<float>(bitmap_read_height));
+  // aabb fields will be updated by system later
+  spriteComponents[amogus] = spriteComp;
+
+  // Add TransformComponent to amogus
+  TransformComponent transformComp;
+  transformComp.position = vec2(0.0f, 0.0f);
+  transformComp.rotation = 0.0f;
+  transformComp.scale = vec2(1.0f, 1.0f);
+  transformComponents[amogus] = transformComp;
+
   vec2 physics_aabb_top_left = vec2(-4.0f, -4.0f);
   vec2 physics_aabb_bottom_right = vec2(4.0f, 4.0f);
   vec2 bounce_direction = vec2(1.0f, 1.0f);
@@ -158,64 +173,67 @@ int main(int argc, char *argv[]) {
 
     // WASD Movement
     float speed = 0.1f;
+    TransformComponent &amogusTransform = transformComponents[amogus];
     if (keystate[SDL_SCANCODE_W]) {
-      amogus.position = amogus.position + vec2(0.0f, -speed);
+      amogusTransform.position = amogusTransform.position + vec2(0.0f, -speed);
     }
     if (keystate[SDL_SCANCODE_A]) {
-      amogus.position = amogus.position + vec2(-speed, 0.0f);
+      amogusTransform.position = amogusTransform.position + vec2(-speed, 0.0f);
     }
     if (keystate[SDL_SCANCODE_S]) {
-      amogus.position = amogus.position + vec2(0.0f, speed);
+      amogusTransform.position = amogusTransform.position + vec2(0.0f, speed);
     }
     if (keystate[SDL_SCANCODE_D]) {
-      amogus.position = amogus.position + vec2(speed, 0.0f);
+      amogusTransform.position = amogusTransform.position + vec2(speed, 0.0f);
     }
 
     // DVD logo integration
-    amogus.position = amogus.position + bounce_direction * 0.05f;
+    amogusTransform.position =
+        amogusTransform.position + bounce_direction * 0.05f;
 
     int ticks = SDL_GetTicks();
     float sine = std::sin(float(ticks) / 256.0f);
     float cosine = std::cos(float(ticks) / 256.0f);
 
-    // Set up the transform object for the sprite
-    Transform t;
-    t.set_x_basis(vec2(cosine, -sine)); // x_axis
-    t.set_y_basis(vec2(sine, cosine));  // y_axis
-    t.set_origin(amogus.position);
-    amogus.set_transform(t);
+    // Set up the transform component for the sprite (rotation only)
+    amogusTransform.rotation = std::atan2(sine, cosine);
 
     // Recalculate transform and AABB
     vec2 transformed_physics_aabb_top_left =
-        physics_aabb_top_left + amogus.position;
+        physics_aabb_top_left + amogusTransform.position;
     vec2 transformed_physics_aabb_bottom_right =
-        physics_aabb_bottom_right + amogus.position;
+        physics_aabb_bottom_right + amogusTransform.position;
 
     // Physics
     bool collided = false;
     if (transformed_physics_aabb_top_left.x < 0) {
-      amogus.position.x += -transformed_physics_aabb_top_left.x;
+      amogusTransform.position.x += -transformed_physics_aabb_top_left.x;
       bounce_direction.x *= -1.0f;
       collided = true;
     }
     if (transformed_physics_aabb_bottom_right.x > WIDTH) {
-      amogus.position.x -= (transformed_physics_aabb_bottom_right.x - WIDTH);
+      amogusTransform.position.x -=
+          (transformed_physics_aabb_bottom_right.x - WIDTH);
       bounce_direction.x *= -1.0f;
       collided = true;
     }
     if (transformed_physics_aabb_top_left.y < 0) {
-      amogus.position.y += -transformed_physics_aabb_top_left.y;
+      amogusTransform.position.y += -transformed_physics_aabb_top_left.y;
       bounce_direction.y *= -1.0f;
       collided = true;
     }
     if (transformed_physics_aabb_bottom_right.y > HEIGHT) {
-      amogus.position.y -= (transformed_physics_aabb_bottom_right.y - HEIGHT);
+      amogusTransform.position.y -=
+          (transformed_physics_aabb_bottom_right.y - HEIGHT);
       bounce_direction.y *= -1.0f;
       collided = true;
     }
 
     // Recalculate sprite rendering AABB after collision adjustment
-    amogus.update_aabb();
+    // (This would be handled by a system in a full ECS, but for now, update the
+    // component) We'll just zero the AABB for now; a system should update it.
+    spriteComponents[amogus].aabb_top_left = vec2(0, 0);
+    spriteComponents[amogus].aabb_bottom_right = vec2(0, 0);
 
     // --- Software rendering: fill the pixel buffer (checkerboard) ---
     int checker_size = 1;
@@ -227,8 +245,9 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // Draw sprite using Sprite's draw method
-    amogus.draw(staging_buffer, WIDTH, HEIGHT);
+    // --- ECS SYSTEMS: Update AABB and draw all sprites ---
+    SpriteSystem::update_aabbs();
+    SpriteSystem::draw_all(staging_buffer, WIDTH, HEIGHT);
 
     // --- Upload pixel buffer to texture ---
     void *tex_pixels;

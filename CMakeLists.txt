@@ -17,7 +17,10 @@ set(SR_SOURCES
 	src/transform.cpp
 	src/vec2.cpp
 	src/vec2i.cpp
-)
+	src/entity.cpp
+	src/component.cpp
+	src/sprite_system.cpp
+	)
 
 # Create your game executable target as usual
 add_executable(software-renderer ${SR_SOURCES})
