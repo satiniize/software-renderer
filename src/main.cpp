@@ -137,13 +137,25 @@ int main(int argc, char *argv[]) {
   // Software buffer for screen pixels
   uint32_t framebuffer[WIDTH * HEIGHT];
 
-  // FPS timer variables
-  uint32_t fps_last_time = SDL_GetTicks();
-  int fps_frames = 0;
+  // // FPS timer variables
+  // uint32_t fps_last_time = SDL_GetTicks();
+  // int fps_frames = 0;
 
   bool running = true;
 
+  uint32_t prev_frame_tick = SDL_GetTicks();
+  float accumulator = 0.0;
+  float physics_frame_rate = 10.0f;
+  float physics_delta_time = 1.0f / physics_frame_rate;
+  float process_delta_time = 0.0f;
+
   while (running) {
+    uint32_t frame_tick = SDL_GetTicks();
+    process_delta_time =
+        static_cast<float>(frame_tick - prev_frame_tick) / 1000.0f;
+    accumulator += process_delta_time;
+    prev_frame_tick = frame_tick;
+
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_EVENT_QUIT) {
@@ -153,64 +165,68 @@ int main(int argc, char *argv[]) {
 
     const bool *keystate = SDL_GetKeyboardState(NULL);
 
-    // WASD Movement
-    float speed = 0.1f;
-    TransformComponent &amogus_transform = transform_components[amogus];
-    if (keystate[SDL_SCANCODE_W]) {
-      amogus_transform.position =
-          amogus_transform.position + vec2(0.0f, -speed);
-    }
-    if (keystate[SDL_SCANCODE_A]) {
-      amogus_transform.position =
-          amogus_transform.position + vec2(-speed, 0.0f);
-    }
-    if (keystate[SDL_SCANCODE_S]) {
-      amogus_transform.position = amogus_transform.position + vec2(0.0f, speed);
-    }
-    if (keystate[SDL_SCANCODE_D]) {
-      amogus_transform.position = amogus_transform.position + vec2(speed, 0.0f);
-    }
+    if (accumulator >= physics_delta_time) {
+      accumulator -= physics_delta_time;
 
-    // DVD logo integration
-    amogus_transform.position =
-        amogus_transform.position + bounce_direction * 0.05f;
+      // Get entity transform
+      TransformComponent &amogus_transform = transform_components[amogus];
 
-    int ticks = SDL_GetTicks();
-    float sine = std::sin(float(ticks) / 256.0f);
-    float cosine = std::cos(float(ticks) / 256.0f);
+      // WASD Movement
+      float speed = 0.1f;
+      float distance = speed * physics_delta_time;
 
-    // Set up the transform component for the sprite (rotation only)
-    amogus_transform.rotation = std::atan2(sine, cosine);
+      if (keystate[SDL_SCANCODE_W]) {
+        amogus_transform.position =
+            amogus_transform.position + vec2(0.0f, -distance);
+      }
+      if (keystate[SDL_SCANCODE_A]) {
+        amogus_transform.position =
+            amogus_transform.position + vec2(-distance, 0.0f);
+      }
+      if (keystate[SDL_SCANCODE_S]) {
+        amogus_transform.position =
+            amogus_transform.position + vec2(0.0f, distance);
+      }
+      if (keystate[SDL_SCANCODE_D]) {
+        amogus_transform.position =
+            amogus_transform.position + vec2(distance, 0.0f);
+      }
 
-    // Recalculate transform and AABB
-    vec2 transformed_physics_aabb_top_left =
-        physics_aabb_top_left + amogus_transform.position;
-    vec2 transformed_physics_aabb_bottom_right =
-        physics_aabb_bottom_right + amogus_transform.position;
+      // DVD logo integration
+      amogus_transform.position = amogus_transform.position +
+                                  bounce_direction * 16.0f * physics_delta_time;
+      amogus_transform.rotation += 2.0f * physics_delta_time;
 
-    // Physics
-    bool collided = false;
-    if (transformed_physics_aabb_top_left.x < 0) {
-      amogus_transform.position.x += -transformed_physics_aabb_top_left.x;
-      bounce_direction.x *= -1.0f;
-      collided = true;
-    }
-    if (transformed_physics_aabb_bottom_right.x > WIDTH) {
-      amogus_transform.position.x -=
-          (transformed_physics_aabb_bottom_right.x - WIDTH);
-      bounce_direction.x *= -1.0f;
-      collided = true;
-    }
-    if (transformed_physics_aabb_top_left.y < 0) {
-      amogus_transform.position.y += -transformed_physics_aabb_top_left.y;
-      bounce_direction.y *= -1.0f;
-      collided = true;
-    }
-    if (transformed_physics_aabb_bottom_right.y > HEIGHT) {
-      amogus_transform.position.y -=
-          (transformed_physics_aabb_bottom_right.y - HEIGHT);
-      bounce_direction.y *= -1.0f;
-      collided = true;
+      // Recalculate transform and AABB
+      vec2 transformed_physics_aabb_top_left =
+          physics_aabb_top_left + amogus_transform.position;
+      vec2 transformed_physics_aabb_bottom_right =
+          physics_aabb_bottom_right + amogus_transform.position;
+
+      // Physics
+      bool collided = false;
+      if (transformed_physics_aabb_top_left.x < 0) {
+        amogus_transform.position.x += -transformed_physics_aabb_top_left.x;
+        bounce_direction.x *= -1.0f;
+        collided = true;
+      }
+      if (transformed_physics_aabb_bottom_right.x > WIDTH) {
+        amogus_transform.position.x -=
+            (transformed_physics_aabb_bottom_right.x - WIDTH);
+        bounce_direction.x *= -1.0f;
+        collided = true;
+      }
+      if (transformed_physics_aabb_top_left.y < 0) {
+        amogus_transform.position.y += -transformed_physics_aabb_top_left.y;
+        bounce_direction.y *= -1.0f;
+        collided = true;
+      }
+      if (transformed_physics_aabb_bottom_right.y > HEIGHT) {
+        amogus_transform.position.y -=
+            (transformed_physics_aabb_bottom_right.y - HEIGHT);
+        bounce_direction.y *= -1.0f;
+        collided = true;
+      }
     }
 
     // --- Software rendering: fill the pixel buffer (checkerboard) ---
@@ -241,13 +257,13 @@ int main(int argc, char *argv[]) {
     SDL_RenderPresent(renderer);
 
     // FPS timer logic
-    fps_frames++;
-    uint32_t now = SDL_GetTicks();
-    if (now - fps_last_time >= 1000) {
-      SDL_Log("FPS: %d", fps_frames);
-      fps_frames = 0;
-      fps_last_time = now;
-    }
+    // fps_frames++;
+    // uint32_t now = SDL_GetTicks();
+    // if (now - fps_last_time >= 1000) {
+    //   SDL_Log("FPS: %d", fps_frames);
+    //   fps_frames = 0;
+    //   fps_last_time = now;
+    // }
   }
   SDL_DestroyGPUDevice(device);
   SDL_DestroyTexture(texture);
