@@ -13,14 +13,14 @@ void Update(float delta_time) {
 
   float WIDTH = 320.0f;
   float HEIGHT = 180.0f;
-  float coefficient_of_restitution = 0.75f;
+  float coefficient_of_restitution = 0.9f;
 
+  // Collide with edge
   for (auto &[entity, rigidbody] : rigidbody_components) {
     auto transform_it = transform_components.find(entity);
     if (transform_it != transform_components.end()) {
       TransformComponent &transform = transform_it->second;
 
-      // Physics system
       // Modify velocities
       rigidbody.velocity = rigidbody.velocity + rigidbody.gravity * delta_time;
 
@@ -54,6 +54,7 @@ void Update(float delta_time) {
     }
   }
 
+  // Collide with each other
   for (auto it1 = rigidbody_components.begin();
        it1 != rigidbody_components.end(); ++it1) {
     auto &entity1 = it1->first;
@@ -96,50 +97,36 @@ void Update(float delta_time) {
 
           bool is_colliding = x_overlap > 0.0f && y_overlap > 0.0f;
 
-          // Collision check
+          // Resolve collision
           if (is_colliding) {
-            // Determine the axis of longest overlap
+            vec2 center_of_mass_velocity =
+                (rigidbody1.velocity * rigidbody1.mass +
+                 rigidbody2.velocity * rigidbody2.mass) /
+                (rigidbody1.mass + rigidbody2.mass);
+            rigidbody1.velocity =
+                center_of_mass_velocity * 2.0f - rigidbody1.velocity;
+            rigidbody2.velocity =
+                center_of_mass_velocity * 2.0f - rigidbody2.velocity;
+            // Determine the axis of shortest overlap
             if (x_overlap < y_overlap) {
               // Apply impulse along the x-axis
               float push_back = x_overlap * 0.5f;
               if (transform1.position.x < transform2.position.x) {
                 transform1.position.x -= push_back;
                 transform2.position.x += push_back;
-
-                rigidbody1.velocity.x *= -coefficient_of_restitution;
-                rigidbody2.velocity.x *= -coefficient_of_restitution;
               } else {
                 transform1.position.x += push_back;
                 transform2.position.x -= push_back;
-
-                float temp_velocity_x1 = rigidbody1.velocity.x;
-                rigidbody1.velocity.x =
-                    rigidbody2.velocity.x * coefficient_of_restitution;
-                rigidbody2.velocity.x =
-                    temp_velocity_x1 * coefficient_of_restitution;
               }
             } else {
-
-              // Apply impulse along the y - axis
+              // Apply impulse along the y-axis
               float push_back = y_overlap * 0.5f;
               if (transform1.position.y < transform2.position.y) {
                 transform1.position.y -= push_back;
                 transform2.position.y += push_back;
-
-                float temp_velocity_y1 = rigidbody1.velocity.y;
-                rigidbody1.velocity.y =
-                    rigidbody2.velocity.y * coefficient_of_restitution;
-                rigidbody2.velocity.y =
-                    temp_velocity_y1 * coefficient_of_restitution;
               } else {
                 transform1.position.y += push_back;
                 transform2.position.y -= push_back;
-
-                float temp_velocity_y1 = rigidbody1.velocity.y;
-                rigidbody1.velocity.y =
-                    rigidbody2.velocity.y * coefficient_of_restitution;
-                rigidbody2.velocity.y =
-                    temp_velocity_y1 * coefficient_of_restitution;
               }
             }
           }

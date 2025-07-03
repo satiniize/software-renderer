@@ -140,8 +140,8 @@ int main(int argc, char *argv[]) {
 
   // Add RigidbodyComponent to amogus
   RigidbodyComponent rigidbody_component;
-  rigidbody_component.aabb_top_left = vec2(-4.0f, -4.0f);
-  rigidbody_component.aabb_bottom_right = vec2(4.0f, 4.0f);
+  rigidbody_component.aabb_top_left = vec2(-8.0f, -8.0f);
+  rigidbody_component.aabb_bottom_right = vec2(8.0f, 8.0f);
   rigidbody_component.velocity = vec2(0.0f, 0.0f);
   rigidbody_component.gravity = vec2(0.0f, 256.0f);
   rigidbody_components[amogus] = rigidbody_component;
@@ -151,7 +151,7 @@ int main(int argc, char *argv[]) {
 
   // Add SpriteComponent to amogus2
   SpriteComponent sprite_component2;
-  sprite_component2.bitmap = bmp_read;
+  sprite_component2.bitmap = bmp_write;
   sprite_component2.size = vec2(static_cast<float>(bitmap_read_width),
                                 static_cast<float>(bitmap_read_height));
   sprite_components[amogus2] = sprite_component2;
@@ -165,8 +165,8 @@ int main(int argc, char *argv[]) {
 
   // Add RigidbodyComponent to amogus2
   RigidbodyComponent rigidbody_component2;
-  rigidbody_component2.aabb_top_left = vec2(-4.0f, -4.0f);
-  rigidbody_component2.aabb_bottom_right = vec2(4.0f, 4.0f);
+  rigidbody_component2.aabb_top_left = vec2(-8.0f, -8.0f);
+  rigidbody_component2.aabb_bottom_right = vec2(8.0f, 8.0f);
   rigidbody_component2.velocity = vec2(0.0f, 0.0f);
   rigidbody_component2.gravity = vec2(0.0f, 256.0f);
   rigidbody_components[amogus2] = rigidbody_component2;
@@ -174,7 +174,7 @@ int main(int argc, char *argv[]) {
   // Software buffer for screen pixels
   uint32_t back_buffer[WIDTH * HEIGHT];
 
-  float physics_frame_rate = 60.0f;
+  float physics_frame_rate = 120.0f;
 
   uint32_t prev_frame_tick = SDL_GetTicks();
   float physics_delta_time = 1.0f / physics_frame_rate;
