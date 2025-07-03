@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -146,30 +147,39 @@ int main(int argc, char *argv[]) {
   rigidbody_component.gravity = vec2(0.0f, 256.0f);
   rigidbody_components[amogus] = rigidbody_component;
 
-  // Amogus2
-  EntityID amogus2 = entity_manager.create();
+  std::mt19937 random_engine;
+  std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+  float velocity_magnitude = 512.0f;
+  int friends = 16;
+  for (int i = 0; i < friends; ++i) {
+    // Amogus2
+    EntityID amogus2 = entity_manager.create();
 
-  // Add SpriteComponent to amogus2
-  SpriteComponent sprite_component2;
-  sprite_component2.bitmap = bmp_write;
-  sprite_component2.size = vec2(static_cast<float>(bitmap_read_width),
-                                static_cast<float>(bitmap_read_height));
-  sprite_components[amogus2] = sprite_component2;
+    // Add SpriteComponent to amogus2
+    SpriteComponent sprite_component2;
+    sprite_component2.bitmap = bmp_write;
+    sprite_component2.size = vec2(static_cast<float>(bitmap_read_width),
+                                  static_cast<float>(bitmap_read_height));
+    sprite_components[amogus2] = sprite_component2;
 
-  // Add TransformComponent to amogus2
-  TransformComponent transform_component2;
-  transform_component2.position = vec2(128.0f, 0.0f);
-  transform_component2.rotation = 0.0f;
-  transform_component2.scale = vec2(1.0f, 1.0f);
-  transform_components[amogus2] = transform_component2;
+    // Add TransformComponent to amogus2
+    TransformComponent transform_component2;
+    transform_component2.position =
+        vec2((1.0f + static_cast<float>(i)) * 16.0f, 0.0f);
+    transform_component2.rotation = 0.0f;
+    transform_component2.scale = vec2(1.0f, 1.0f);
+    transform_components[amogus2] = transform_component2;
 
-  // Add RigidbodyComponent to amogus2
-  RigidbodyComponent rigidbody_component2;
-  rigidbody_component2.aabb_top_left = vec2(-8.0f, -8.0f);
-  rigidbody_component2.aabb_bottom_right = vec2(8.0f, 8.0f);
-  rigidbody_component2.velocity = vec2(0.0f, 0.0f);
-  rigidbody_component2.gravity = vec2(0.0f, 256.0f);
-  rigidbody_components[amogus2] = rigidbody_component2;
+    // Add RigidbodyComponent to amogus2
+    RigidbodyComponent rigidbody_component2;
+    rigidbody_component2.aabb_top_left = vec2(-8.0f, -8.0f);
+    rigidbody_component2.aabb_bottom_right = vec2(8.0f, 8.0f);
+    rigidbody_component2.velocity =
+        vec2(velocity_magnitude * distribution(random_engine),
+             velocity_magnitude * distribution(random_engine));
+    rigidbody_component2.gravity = vec2(0.0f, 256.0f);
+    rigidbody_components[amogus2] = rigidbody_component2;
+  }
 
   // Software buffer for screen pixels
   uint32_t back_buffer[WIDTH * HEIGHT];

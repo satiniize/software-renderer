@@ -13,7 +13,7 @@ void Update(float delta_time) {
 
   float WIDTH = 320.0f;
   float HEIGHT = 180.0f;
-  float coefficient_of_restitution = 0.9f;
+  float coefficient_of_restitution = 0.6f;
 
   // Collide with edge
   for (auto &[entity, rigidbody] : rigidbody_components) {
