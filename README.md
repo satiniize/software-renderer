@@ -7,6 +7,25 @@ This project is a software renderer, designed to demonstrate graphics rendering 
 - Pure software rendering (no GPU acceleration)
 - Modular codebase for easy experimentation
 - Uses [SDL](https://github.com/libsdl-org/SDL) for window management and input (as a submodule)
+- Bitmap image loading and saving
+- Entity Component System (ECS) architecture
+- Basic physics simulation
+- Sprite rendering
+
+## Architecture
+
+The project follows an Entity Component System (ECS) architecture. This means that game objects are represented as entities, which are essentially IDs. Each entity can have multiple components, which store data related to different aspects of the entity (e.g., position, sprite, physics). Systems operate on entities based on their components.
+
+## Key Components
+
+- `Bitmap`: Handles bitmap image loading, saving, and pixel manipulation.
+- `EntityManager`: Manages the creation and destruction of entities.
+- `ComponentStorage`: Stores components for each entity.
+- `TransformComponent`: Stores the position, rotation, and scale of an entity.
+- `SpriteComponent`: Stores the bitmap and size of a sprite.
+- `RigidbodyComponent`: Stores the physical properties of an entity, such as velocity, gravity, and AABB (Axis-Aligned Bounding Box).
+- `PhysicsSystem`: Updates the position and velocity of entities based on their `RigidbodyComponent` and `TransformComponent`.
+- `SpriteSystem`: Draws sprites to the screen based on their `SpriteComponent` and `TransformComponent`.
 
 ## Getting Started
 
@@ -26,18 +45,16 @@ git submodule update --init --recursive
 
 ### Building
 
-(Provide build instructions here, e.g., using CMake or Make, once available.)
+To build the project, run:
+
+```bash
+./build.sh
+```
 
 ### Running
 
 (Provide instructions for running the renderer once built.)
 
-## Contributing
-
-Contributions are welcome! Please open issues or pull requests for suggestions and improvements.
-
 ## License
 
 (Include your license information here.)
-
----
