@@ -69,7 +69,6 @@ int main(int argc, char *argv[]) {
   std::cout << "Pixels: " << bitmap_read_pixels.size() << std::endl;
 
   // SDL setup
-
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
     SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
     return 1;
@@ -121,6 +120,8 @@ int main(int argc, char *argv[]) {
   }
 
   EntityManager entity_manager;
+
+  // Amogus
   EntityID amogus = entity_manager.create();
 
   // Add SpriteComponent to amogus
@@ -145,8 +146,33 @@ int main(int argc, char *argv[]) {
   rigidbody_component.gravity = vec2(0.0f, 256.0f);
   rigidbody_components[amogus] = rigidbody_component;
 
+  // Amogus2
+  EntityID amogus2 = entity_manager.create();
+
+  // Add SpriteComponent to amogus2
+  SpriteComponent sprite_component2;
+  sprite_component2.bitmap = bmp_read;
+  sprite_component2.size = vec2(static_cast<float>(bitmap_read_width),
+                                static_cast<float>(bitmap_read_height));
+  sprite_components[amogus2] = sprite_component2;
+
+  // Add TransformComponent to amogus2
+  TransformComponent transform_component2;
+  transform_component2.position = vec2(128.0f, 0.0f);
+  transform_component2.rotation = 0.0f;
+  transform_component2.scale = vec2(1.0f, 1.0f);
+  transform_components[amogus2] = transform_component2;
+
+  // Add RigidbodyComponent to amogus2
+  RigidbodyComponent rigidbody_component2;
+  rigidbody_component2.aabb_top_left = vec2(-4.0f, -4.0f);
+  rigidbody_component2.aabb_bottom_right = vec2(4.0f, 4.0f);
+  rigidbody_component2.velocity = vec2(0.0f, 0.0f);
+  rigidbody_component2.gravity = vec2(0.0f, 256.0f);
+  rigidbody_components[amogus2] = rigidbody_component2;
+
   // Software buffer for screen pixels
-  uint32_t framebuffer[WIDTH * HEIGHT];
+  uint32_t back_buffer[WIDTH * HEIGHT];
 
   float physics_frame_rate = 60.0f;
 
@@ -176,13 +202,16 @@ int main(int argc, char *argv[]) {
 
     const bool *keystate = SDL_GetKeyboardState(NULL);
 
-    process_frame_count++;
-    float physics_frame_rate = 60.0f;
-    float physics_delta_time = 1.0f / physics_frame_rate;
+    ++process_frame_count;
     if (accumulator >= physics_delta_time) {
       accumulator -= physics_delta_time;
-
-      // Get entity transform
+      ++physics_frame_count;
+      if (physics_frame_count >= static_cast<int>(physics_frame_rate)) {
+        SDL_Log("FPS: %d", static_cast<int>(process_frame_count));
+        physics_frame_count = 0;
+        process_frame_count = 0;
+      }
+      // Get entity transform and rigidbody
       TransformComponent &amogus_transform = transform_components[amogus];
       RigidbodyComponent &amogus_rigidbody = rigidbody_components[amogus];
 
@@ -217,20 +246,19 @@ int main(int argc, char *argv[]) {
       for (int x = 0; x < WIDTH; ++x) {
         int checker = ((x / checker_size) + (y / checker_size)) % 2;
         uint8_t v = checker ? 192 : 128;
-        framebuffer[y * WIDTH + x] = (v << 24) | (v << 16) | (v << 8) | 0xFF;
+        back_buffer[y * WIDTH + x] = (v << 24) | (v << 16) | (v << 8) | 0xFF;
       }
     }
 
-    // --- ECS SYSTEMS: Update AABB and draw all sprites ---
     // Process tick-rate ECS sytems
     SpriteSystem::update_aabbs();
-    SpriteSystem::draw_all(framebuffer, WIDTH, HEIGHT);
+    SpriteSystem::draw_all(back_buffer, WIDTH, HEIGHT);
 
-    // --- Upload pixel buffer to texture ---
-    void *tex_pixels;
+    // Upload pixel buffer to texture
+    void *front_buffer;
     int pitch;
-    SDL_LockTexture(texture, NULL, &tex_pixels, &pitch);
-    memcpy(tex_pixels, framebuffer, WIDTH * HEIGHT * sizeof(uint32_t));
+    SDL_LockTexture(texture, NULL, &front_buffer, &pitch);
+    memcpy(front_buffer, back_buffer, WIDTH * HEIGHT * sizeof(uint32_t));
     SDL_UnlockTexture(texture);
 
     // --- Render the texture to the window ---
