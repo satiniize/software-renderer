@@ -8,5 +8,5 @@
 // ECS component storage for each component type.
 // Each map stores components by EntityID.
 
-inline std::unordered_map<EntityID, SpriteComponent> spriteComponents;
-inline std::unordered_map<EntityID, TransformComponent> transformComponents;
+inline std::unordered_map<EntityID, SpriteComponent> sprite_components;
+inline std::unordered_map<EntityID, TransformComponent> transform_components;

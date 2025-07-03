@@ -7,24 +7,24 @@ using EntityID = uint32_t;
 
 class EntityManager {
 public:
-  EntityManager() : nextId(1) {}
+  EntityManager() : next_id(1) {}
 
   // Create a new entity and return its unique ID
   EntityID create() {
-    EntityID id = nextId++;
-    activeEntities.insert(id);
+    EntityID id = next_id++;
+    active_entities.insert(id);
     return id;
   }
 
   // Optionally destroy an entity (removes from active set)
-  void destroy(EntityID id) { activeEntities.erase(id); }
+  void destroy(EntityID id) { active_entities.erase(id); }
 
   // Check if an entity is still active
   bool is_active(EntityID id) const {
-    return activeEntities.find(id) != activeEntities.end();
+    return active_entities.find(id) != active_entities.end();
   }
 
 private:
-  EntityID nextId;
-  std::unordered_set<EntityID> activeEntities;
+  EntityID next_id;
+  std::unordered_set<EntityID> active_entities;
 };

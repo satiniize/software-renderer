@@ -112,30 +112,30 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  EntityManager entityManager;
-  EntityID amogus = entityManager.create();
+  EntityManager entity_manager;
+  EntityID amogus = entity_manager.create();
 
   // Add SpriteComponent to amogus
-  SpriteComponent spriteComp;
-  spriteComp.bitmap = bmp_read;
-  spriteComp.size = vec2(static_cast<float>(bitmap_read_width),
-                         static_cast<float>(bitmap_read_height));
+  SpriteComponent sprite_component;
+  sprite_component.bitmap = bmp_read;
+  sprite_component.size = vec2(static_cast<float>(bitmap_read_width),
+                               static_cast<float>(bitmap_read_height));
   // aabb fields will be updated by system later
-  spriteComponents[amogus] = spriteComp;
+  sprite_components[amogus] = sprite_component;
 
   // Add TransformComponent to amogus
-  TransformComponent transformComp;
-  transformComp.position = vec2(0.0f, 0.0f);
-  transformComp.rotation = 0.0f;
-  transformComp.scale = vec2(1.0f, 1.0f);
-  transformComponents[amogus] = transformComp;
+  TransformComponent transform_component;
+  transform_component.position = vec2(0.0f, 0.0f);
+  transform_component.rotation = 0.0f;
+  transform_component.scale = vec2(1.0f, 1.0f);
+  transform_components[amogus] = transform_component;
 
   vec2 physics_aabb_top_left = vec2(-4.0f, -4.0f);
   vec2 physics_aabb_bottom_right = vec2(4.0f, 4.0f);
   vec2 bounce_direction = vec2(1.0f, 1.0f);
 
   // Software buffer for screen pixels
-  uint32_t staging_buffer[WIDTH * HEIGHT];
+  uint32_t framebuffer[WIDTH * HEIGHT];
 
   // FPS timer variables
   uint32_t fps_last_time = SDL_GetTicks();
@@ -155,57 +155,59 @@ int main(int argc, char *argv[]) {
 
     // WASD Movement
     float speed = 0.1f;
-    TransformComponent &amogusTransform = transformComponents[amogus];
+    TransformComponent &amogus_transform = transform_components[amogus];
     if (keystate[SDL_SCANCODE_W]) {
-      amogusTransform.position = amogusTransform.position + vec2(0.0f, -speed);
+      amogus_transform.position =
+          amogus_transform.position + vec2(0.0f, -speed);
     }
     if (keystate[SDL_SCANCODE_A]) {
-      amogusTransform.position = amogusTransform.position + vec2(-speed, 0.0f);
+      amogus_transform.position =
+          amogus_transform.position + vec2(-speed, 0.0f);
     }
     if (keystate[SDL_SCANCODE_S]) {
-      amogusTransform.position = amogusTransform.position + vec2(0.0f, speed);
+      amogus_transform.position = amogus_transform.position + vec2(0.0f, speed);
     }
     if (keystate[SDL_SCANCODE_D]) {
-      amogusTransform.position = amogusTransform.position + vec2(speed, 0.0f);
+      amogus_transform.position = amogus_transform.position + vec2(speed, 0.0f);
     }
 
     // DVD logo integration
-    amogusTransform.position =
-        amogusTransform.position + bounce_direction * 0.05f;
+    amogus_transform.position =
+        amogus_transform.position + bounce_direction * 0.05f;
 
     int ticks = SDL_GetTicks();
     float sine = std::sin(float(ticks) / 256.0f);
     float cosine = std::cos(float(ticks) / 256.0f);
 
     // Set up the transform component for the sprite (rotation only)
-    amogusTransform.rotation = std::atan2(sine, cosine);
+    amogus_transform.rotation = std::atan2(sine, cosine);
 
     // Recalculate transform and AABB
     vec2 transformed_physics_aabb_top_left =
-        physics_aabb_top_left + amogusTransform.position;
+        physics_aabb_top_left + amogus_transform.position;
     vec2 transformed_physics_aabb_bottom_right =
-        physics_aabb_bottom_right + amogusTransform.position;
+        physics_aabb_bottom_right + amogus_transform.position;
 
     // Physics
     bool collided = false;
     if (transformed_physics_aabb_top_left.x < 0) {
-      amogusTransform.position.x += -transformed_physics_aabb_top_left.x;
+      amogus_transform.position.x += -transformed_physics_aabb_top_left.x;
       bounce_direction.x *= -1.0f;
       collided = true;
     }
     if (transformed_physics_aabb_bottom_right.x > WIDTH) {
-      amogusTransform.position.x -=
+      amogus_transform.position.x -=
           (transformed_physics_aabb_bottom_right.x - WIDTH);
       bounce_direction.x *= -1.0f;
       collided = true;
     }
     if (transformed_physics_aabb_top_left.y < 0) {
-      amogusTransform.position.y += -transformed_physics_aabb_top_left.y;
+      amogus_transform.position.y += -transformed_physics_aabb_top_left.y;
       bounce_direction.y *= -1.0f;
       collided = true;
     }
     if (transformed_physics_aabb_bottom_right.y > HEIGHT) {
-      amogusTransform.position.y -=
+      amogus_transform.position.y -=
           (transformed_physics_aabb_bottom_right.y - HEIGHT);
       bounce_direction.y *= -1.0f;
       collided = true;
@@ -217,19 +219,19 @@ int main(int argc, char *argv[]) {
       for (int x = 0; x < WIDTH; ++x) {
         int checker = ((x / checker_size) + (y / checker_size)) % 2;
         uint8_t v = checker ? 192 : 128;
-        staging_buffer[y * WIDTH + x] = (v << 24) | (v << 16) | (v << 8) | 0xFF;
+        framebuffer[y * WIDTH + x] = (v << 24) | (v << 16) | (v << 8) | 0xFF;
       }
     }
 
     // --- ECS SYSTEMS: Update AABB and draw all sprites ---
     SpriteSystem::update_aabbs();
-    SpriteSystem::draw_all(staging_buffer, WIDTH, HEIGHT);
+    SpriteSystem::draw_all(framebuffer, WIDTH, HEIGHT);
 
     // --- Upload pixel buffer to texture ---
     void *tex_pixels;
     int pitch;
     SDL_LockTexture(texture, NULL, &tex_pixels, &pitch);
-    memcpy(tex_pixels, staging_buffer, WIDTH * HEIGHT * sizeof(uint32_t));
+    memcpy(tex_pixels, framebuffer, WIDTH * HEIGHT * sizeof(uint32_t));
     SDL_UnlockTexture(texture);
 
     // --- Render the texture to the window ---

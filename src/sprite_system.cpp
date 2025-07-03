@@ -49,9 +49,9 @@ void calculate_aabb(const TransformComponent &transform,
 
 // System: Update AABBs for all sprites
 void update_aabbs() {
-  for (auto &[entity, sprite] : spriteComponents) {
-    auto it = transformComponents.find(entity);
-    if (it != transformComponents.end()) {
+  for (auto &[entity, sprite] : sprite_components) {
+    auto it = transform_components.find(entity);
+    if (it != transform_components.end()) {
       calculate_aabb(it->second, sprite, sprite.aabb_top_left,
                      sprite.aabb_bottom_right);
     }
@@ -61,9 +61,9 @@ void update_aabbs() {
 // System: Draw all sprites with transforms to framebuffer
 void draw_all(uint32_t *framebuffer, int framebuffer_width,
               int framebuffer_height) {
-  for (const auto &[entity, sprite] : spriteComponents) {
-    auto it = transformComponents.find(entity);
-    if (it == transformComponents.end())
+  for (const auto &[entity, sprite] : sprite_components) {
+    auto it = transform_components.find(entity);
+    if (it == transform_components.end())
       continue;
     const TransformComponent &transform = it->second;
 
