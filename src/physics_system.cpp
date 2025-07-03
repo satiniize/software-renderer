@@ -7,6 +7,7 @@
 
 namespace PhysicsSystem {
 
+// TODO: Do coefficient of restitution center of mass calculation
 void Update(float delta_time) {
   // Physics code will go here
 
@@ -111,24 +112,34 @@ void Update(float delta_time) {
                 transform1.position.x += push_back;
                 transform2.position.x -= push_back;
 
-                rigidbody1.velocity.x *= -coefficient_of_restitution;
-                rigidbody2.velocity.x *= -coefficient_of_restitution;
+                float temp_velocity_x1 = rigidbody1.velocity.x;
+                rigidbody1.velocity.x =
+                    rigidbody2.velocity.x * coefficient_of_restitution;
+                rigidbody2.velocity.x =
+                    temp_velocity_x1 * coefficient_of_restitution;
               }
             } else {
-              // Apply impulse along the y-axis
+
+              // Apply impulse along the y - axis
               float push_back = y_overlap * 0.5f;
               if (transform1.position.y < transform2.position.y) {
                 transform1.position.y -= push_back;
                 transform2.position.y += push_back;
 
-                rigidbody1.velocity.y *= -coefficient_of_restitution;
-                rigidbody2.velocity.y *= -coefficient_of_restitution;
+                float temp_velocity_y1 = rigidbody1.velocity.y;
+                rigidbody1.velocity.y =
+                    rigidbody2.velocity.y * coefficient_of_restitution;
+                rigidbody2.velocity.y =
+                    temp_velocity_y1 * coefficient_of_restitution;
               } else {
                 transform1.position.y += push_back;
                 transform2.position.y -= push_back;
 
-                rigidbody1.velocity.y *= -coefficient_of_restitution;
-                rigidbody2.velocity.y *= -coefficient_of_restitution;
+                float temp_velocity_y1 = rigidbody1.velocity.y;
+                rigidbody1.velocity.y =
+                    rigidbody2.velocity.y * coefficient_of_restitution;
+                rigidbody2.velocity.y =
+                    temp_velocity_y1 * coefficient_of_restitution;
               }
             }
           }
