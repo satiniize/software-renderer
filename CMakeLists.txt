@@ -16,6 +16,7 @@ set(SR_SOURCES
 	src/vec2.cpp
 	src/vec2i.cpp
 	src/sprite_system.cpp
+	src/physics_system.cpp
 	)
 
 # Create your game executable target as usual

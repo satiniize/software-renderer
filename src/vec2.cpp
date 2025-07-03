@@ -11,3 +11,9 @@ vec2 vec2::operator+(const vec2 &other) const {
 vec2 vec2::operator*(float scalar) const {
   return vec2(x * scalar, y * scalar);
 }
+
+vec2 &vec2::operator+=(const vec2 &other) {
+  x += other.x;
+  y += other.y;
+  return *this;
+}

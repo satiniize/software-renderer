@@ -9,12 +9,20 @@
 #define HEIGHT 180
 
 #include "bitmap.h"
+#include "vec2.h"
+
+// Entities
 #include "component_storage.h"
 #include "entity_manager.h"
-#include "sprite_component.h"
+
+// Systems
+#include "physics_system.h"
 #include "sprite_system.h"
+
+// Components
+#include "rigidbody_component.h"
+#include "sprite_component.h"
 #include "transform_component.h"
-#include "vec2.h"
 
 int main(int argc, char *argv[]) {
   std::string bitmap_write_name = "test_image_write.bmp";
@@ -120,7 +128,6 @@ int main(int argc, char *argv[]) {
   sprite_component.bitmap = bmp_read;
   sprite_component.size = vec2(static_cast<float>(bitmap_read_width),
                                static_cast<float>(bitmap_read_height));
-  // aabb fields will be updated by system later
   sprite_components[amogus] = sprite_component;
 
   // Add TransformComponent to amogus
@@ -130,19 +137,24 @@ int main(int argc, char *argv[]) {
   transform_component.scale = vec2(1.0f, 1.0f);
   transform_components[amogus] = transform_component;
 
-  vec2 physics_aabb_top_left = vec2(-4.0f, -4.0f);
-  vec2 physics_aabb_bottom_right = vec2(4.0f, 4.0f);
-  vec2 velocity = vec2(16.0f, 16.0f);
-  vec2 gravity = vec2(0.0f, 256.0f);
+  // Add RigidbodyComponent to amogus
+  RigidbodyComponent rigidbody_component;
+  rigidbody_component.aabb_top_left = vec2(-4.0f, -4.0f);
+  rigidbody_component.aabb_bottom_right = vec2(4.0f, 4.0f);
+  rigidbody_component.velocity = vec2(0.0f, 0.0f);
+  rigidbody_component.gravity = vec2(0.0f, 256.0f);
+  rigidbody_components[amogus] = rigidbody_component;
 
   // Software buffer for screen pixels
   uint32_t framebuffer[WIDTH * HEIGHT];
 
-  uint32_t prev_frame_tick = SDL_GetTicks();
-  float accumulator = 0.0;
   float physics_frame_rate = 60.0f;
+
+  uint32_t prev_frame_tick = SDL_GetTicks();
   float physics_delta_time = 1.0f / physics_frame_rate;
   float process_delta_time = 0.0f;
+  float accumulator = 0.0;
+
   int physics_frame_count = 0;
   int process_frame_count = 0;
 
@@ -165,74 +177,38 @@ int main(int argc, char *argv[]) {
     const bool *keystate = SDL_GetKeyboardState(NULL);
 
     process_frame_count++;
+    float physics_frame_rate = 60.0f;
+    float physics_delta_time = 1.0f / physics_frame_rate;
     if (accumulator >= physics_delta_time) {
       accumulator -= physics_delta_time;
 
-      physics_frame_count++;
-      if (physics_frame_count >= static_cast<int>(physics_frame_rate)) {
-        SDL_Log("FPS: %d", process_frame_count);
-        process_frame_count = 0;
-        physics_frame_count = 0;
-      }
-
       // Get entity transform
       TransformComponent &amogus_transform = transform_components[amogus];
+      RigidbodyComponent &amogus_rigidbody = rigidbody_components[amogus];
 
-      // Apply gravity
-      velocity = velocity + gravity * physics_delta_time;
-
+      // Player specific code
       // WASD Movement
       float accel = 512.0f;
-
+      vec2 move_dir = vec2(0.0f, 0.0f);
       if (keystate[SDL_SCANCODE_W]) {
-        velocity = velocity + vec2(0.0f, -1.0f) * accel * physics_delta_time;
+        move_dir.y -= 1.0f;
       }
       if (keystate[SDL_SCANCODE_A]) {
-        velocity = velocity + vec2(-1.0f, 0.0f) * accel * physics_delta_time;
+        move_dir.x -= 1.0f;
       }
       if (keystate[SDL_SCANCODE_S]) {
-        velocity = velocity + vec2(0.0f, 1.0f) * accel * physics_delta_time;
+        move_dir.y += 1.0f;
       }
       if (keystate[SDL_SCANCODE_D]) {
-        velocity = velocity + vec2(1.0f, 0.0f) * accel * physics_delta_time;
+        move_dir.x += 1.0f;
       }
+      amogus_rigidbody.velocity += move_dir * accel * physics_delta_time;
 
-      // DVD logo integration
-      amogus_transform.position =
-          amogus_transform.position + velocity * physics_delta_time;
+      // Showcase rotation
       amogus_transform.rotation += 2.0f * physics_delta_time;
 
-      // Recalculate transform and AABB
-      vec2 transformed_physics_aabb_top_left =
-          physics_aabb_top_left + amogus_transform.position;
-      vec2 transformed_physics_aabb_bottom_right =
-          physics_aabb_bottom_right + amogus_transform.position;
-
-      // Physics
-      float coefficient_of_restitution = 0.75f;
-      bool collided = false;
-      if (transformed_physics_aabb_top_left.x < 0) {
-        amogus_transform.position.x += -transformed_physics_aabb_top_left.x;
-        velocity.x *= -coefficient_of_restitution;
-        collided = true;
-      }
-      if (transformed_physics_aabb_bottom_right.x > WIDTH) {
-        amogus_transform.position.x -=
-            (transformed_physics_aabb_bottom_right.x - WIDTH);
-        velocity.x *= -coefficient_of_restitution;
-        collided = true;
-      }
-      if (transformed_physics_aabb_top_left.y < 0) {
-        amogus_transform.position.y += -transformed_physics_aabb_top_left.y;
-        velocity.y *= -coefficient_of_restitution;
-        collided = true;
-      }
-      if (transformed_physics_aabb_bottom_right.y > HEIGHT) {
-        amogus_transform.position.y -=
-            (transformed_physics_aabb_bottom_right.y - HEIGHT);
-        velocity.y *= -coefficient_of_restitution;
-        collided = true;
-      }
+      // Physics tick-rate ECS system
+      PhysicsSystem::Update(physics_delta_time);
     }
 
     // --- Software rendering: fill the pixel buffer (checkerboard) ---
@@ -246,6 +222,7 @@ int main(int argc, char *argv[]) {
     }
 
     // --- ECS SYSTEMS: Update AABB and draw all sprites ---
+    // Process tick-rate ECS sytems
     SpriteSystem::update_aabbs();
     SpriteSystem::draw_all(framebuffer, WIDTH, HEIGHT);
 
