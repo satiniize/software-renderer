@@ -132,24 +132,21 @@ int main(int argc, char *argv[]) {
 
   vec2 physics_aabb_top_left = vec2(-4.0f, -4.0f);
   vec2 physics_aabb_bottom_right = vec2(4.0f, 4.0f);
-  vec2 bounce_direction = vec2(1.0f, 1.0f);
+  vec2 velocity = vec2(16.0f, 16.0f);
+  vec2 gravity = vec2(0.0f, 256.0f);
 
   // Software buffer for screen pixels
   uint32_t framebuffer[WIDTH * HEIGHT];
 
-  // // FPS timer variables
-  // uint32_t fps_last_time = SDL_GetTicks();
-  // int fps_frames = 0;
-
-  bool running = true;
-
   uint32_t prev_frame_tick = SDL_GetTicks();
   float accumulator = 0.0;
-  float physics_frame_rate = 30.0f;
+  float physics_frame_rate = 60.0f;
   float physics_delta_time = 1.0f / physics_frame_rate;
   float process_delta_time = 0.0f;
   int physics_frame_count = 0;
   int process_frame_count = 0;
+
+  bool running = true;
 
   while (running) {
     uint32_t frame_tick = SDL_GetTicks();
@@ -181,30 +178,28 @@ int main(int argc, char *argv[]) {
       // Get entity transform
       TransformComponent &amogus_transform = transform_components[amogus];
 
+      // Apply gravity
+      velocity = velocity + gravity * physics_delta_time;
+
       // WASD Movement
-      float speed = 32.0f;
-      float distance = speed * physics_delta_time;
+      float accel = 512.0f;
 
       if (keystate[SDL_SCANCODE_W]) {
-        amogus_transform.position =
-            amogus_transform.position + vec2(0.0f, -distance);
+        velocity = velocity + vec2(0.0f, -1.0f) * accel * physics_delta_time;
       }
       if (keystate[SDL_SCANCODE_A]) {
-        amogus_transform.position =
-            amogus_transform.position + vec2(-distance, 0.0f);
+        velocity = velocity + vec2(-1.0f, 0.0f) * accel * physics_delta_time;
       }
       if (keystate[SDL_SCANCODE_S]) {
-        amogus_transform.position =
-            amogus_transform.position + vec2(0.0f, distance);
+        velocity = velocity + vec2(0.0f, 1.0f) * accel * physics_delta_time;
       }
       if (keystate[SDL_SCANCODE_D]) {
-        amogus_transform.position =
-            amogus_transform.position + vec2(distance, 0.0f);
+        velocity = velocity + vec2(1.0f, 0.0f) * accel * physics_delta_time;
       }
 
       // DVD logo integration
-      amogus_transform.position = amogus_transform.position +
-                                  bounce_direction * 16.0f * physics_delta_time;
+      amogus_transform.position =
+          amogus_transform.position + velocity * physics_delta_time;
       amogus_transform.rotation += 2.0f * physics_delta_time;
 
       // Recalculate transform and AABB
@@ -214,27 +209,28 @@ int main(int argc, char *argv[]) {
           physics_aabb_bottom_right + amogus_transform.position;
 
       // Physics
+      float coefficient_of_restitution = 0.75f;
       bool collided = false;
       if (transformed_physics_aabb_top_left.x < 0) {
         amogus_transform.position.x += -transformed_physics_aabb_top_left.x;
-        bounce_direction.x *= -1.0f;
+        velocity.x *= -coefficient_of_restitution;
         collided = true;
       }
       if (transformed_physics_aabb_bottom_right.x > WIDTH) {
         amogus_transform.position.x -=
             (transformed_physics_aabb_bottom_right.x - WIDTH);
-        bounce_direction.x *= -1.0f;
+        velocity.x *= -coefficient_of_restitution;
         collided = true;
       }
       if (transformed_physics_aabb_top_left.y < 0) {
         amogus_transform.position.y += -transformed_physics_aabb_top_left.y;
-        bounce_direction.y *= -1.0f;
+        velocity.y *= -coefficient_of_restitution;
         collided = true;
       }
       if (transformed_physics_aabb_bottom_right.y > HEIGHT) {
         amogus_transform.position.y -=
             (transformed_physics_aabb_bottom_right.y - HEIGHT);
-        bounce_direction.y *= -1.0f;
+        velocity.y *= -coefficient_of_restitution;
         collided = true;
       }
     }
@@ -265,15 +261,6 @@ int main(int argc, char *argv[]) {
     SDL_FRect dst = {0, 0, WIDTH * scale, HEIGHT * scale};
     SDL_RenderTexture(renderer, texture, NULL, &dst);
     SDL_RenderPresent(renderer);
-
-    // FPS timer logic
-    // fps_frames++;
-    // uint32_t now = SDL_GetTicks();
-    // if (now - fps_last_time >= 1000) {
-    //   SDL_Log("FPS: %d", fps_frames);
-    //   fps_frames = 0;
-    //   fps_last_time = now;
-    // }
   }
   SDL_DestroyGPUDevice(device);
   SDL_DestroyTexture(texture);
