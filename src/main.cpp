@@ -145,9 +145,11 @@ int main(int argc, char *argv[]) {
 
   uint32_t prev_frame_tick = SDL_GetTicks();
   float accumulator = 0.0;
-  float physics_frame_rate = 10.0f;
+  float physics_frame_rate = 30.0f;
   float physics_delta_time = 1.0f / physics_frame_rate;
   float process_delta_time = 0.0f;
+  int physics_frame_count = 0;
+  int process_frame_count = 0;
 
   while (running) {
     uint32_t frame_tick = SDL_GetTicks();
@@ -165,14 +167,22 @@ int main(int argc, char *argv[]) {
 
     const bool *keystate = SDL_GetKeyboardState(NULL);
 
+    process_frame_count++;
     if (accumulator >= physics_delta_time) {
       accumulator -= physics_delta_time;
+
+      physics_frame_count++;
+      if (physics_frame_count >= static_cast<int>(physics_frame_rate)) {
+        SDL_Log("FPS: %d", process_frame_count);
+        process_frame_count = 0;
+        physics_frame_count = 0;
+      }
 
       // Get entity transform
       TransformComponent &amogus_transform = transform_components[amogus];
 
       // WASD Movement
-      float speed = 0.1f;
+      float speed = 32.0f;
       float distance = speed * physics_delta_time;
 
       if (keystate[SDL_SCANCODE_W]) {
