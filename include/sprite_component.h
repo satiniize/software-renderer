@@ -1,5 +1,6 @@
 #pragma once
 
+#include "aabb.h"
 #include "bitmap.h"
 #include "vec2.h"
 
@@ -7,6 +8,5 @@
 struct SpriteComponent {
   Bitmap bitmap;
   vec2 size;
-  vec2 aabb_top_left;
-  vec2 aabb_bottom_right;
+  AABB rendering_aabb;
 };

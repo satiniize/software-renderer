@@ -52,8 +52,8 @@ void update_aabbs() {
   for (auto &[entity, sprite] : sprite_components) {
     auto it = transform_components.find(entity);
     if (it != transform_components.end()) {
-      calculate_aabb(it->second, sprite, sprite.aabb_top_left,
-                     sprite.aabb_bottom_right);
+      calculate_aabb(it->second, sprite, sprite.rendering_aabb.top_left,
+                     sprite.rendering_aabb.bottom_right);
     }
   }
 }
@@ -81,16 +81,16 @@ void draw_all(uint32_t *framebuffer, int framebuffer_width,
     float sin_r = std::sin(-transform.rotation);
 
     // Only draw within the AABB
-    int min_x =
-        std::max(0, static_cast<int>(std::floor(sprite.aabb_top_left.x)));
-    int max_x =
-        std::min(framebuffer_width,
-                 static_cast<int>(std::ceil(sprite.aabb_bottom_right.x)));
-    int min_y =
-        std::max(0, static_cast<int>(std::floor(sprite.aabb_top_left.y)));
-    int max_y =
-        std::min(framebuffer_height,
-                 static_cast<int>(std::ceil(sprite.aabb_bottom_right.y)));
+    int min_x = std::max(
+        0, static_cast<int>(std::floor(sprite.rendering_aabb.top_left.x)));
+    int max_x = std::min(
+        framebuffer_width,
+        static_cast<int>(std::ceil(sprite.rendering_aabb.bottom_right.x)));
+    int min_y = std::max(
+        0, static_cast<int>(std::floor(sprite.rendering_aabb.top_left.y)));
+    int max_y = std::min(
+        framebuffer_height,
+        static_cast<int>(std::ceil(sprite.rendering_aabb.bottom_right.y)));
 
     for (int y = min_y; y < max_y; ++y) {
       for (int x = min_x; x < max_x; ++x) {

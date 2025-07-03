@@ -1,11 +1,11 @@
 #pragma once
 
+#include "aabb.h"
 #include "vec2.h"
 
 struct RigidbodyComponent {
 public:
-  vec2 aabb_top_left = vec2(-4.0f, -4.0f);
-  vec2 aabb_bottom_right = vec2(4.0f, 4.0f);
+  AABB collision_aabb = AABB(vec2(-4.0f, -4.0f), vec2(4.0f, 4.0f));
   vec2 velocity = vec2(0.0f, 0.0f);
   vec2 gravity = vec2(0.0f, 256.0f);
   float mass = 1.0f;

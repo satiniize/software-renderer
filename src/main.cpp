@@ -141,16 +141,17 @@ int main(int argc, char *argv[]) {
 
   // Add RigidbodyComponent to amogus
   RigidbodyComponent rigidbody_component;
-  rigidbody_component.aabb_top_left = vec2(-8.0f, -8.0f);
-  rigidbody_component.aabb_bottom_right = vec2(8.0f, 8.0f);
+  rigidbody_component.collision_aabb =
+      AABB(vec2(-8.0f, -8.0f), vec2(8.0f, 8.0f));
   rigidbody_component.velocity = vec2(0.0f, 0.0f);
   rigidbody_component.gravity = vec2(0.0f, 256.0f);
   rigidbody_components[amogus] = rigidbody_component;
 
   std::mt19937 random_engine;
-  std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+  std::uniform_real_distribution<float> velocity_distribution(-1.0f, 1.0f);
+  std::uniform_real_distribution<float> position_distribution(0.0f, 1.0f);
   float velocity_magnitude = 512.0f;
-  int friends = 8;
+  int friends = 32;
   for (int i = 0; i < friends; ++i) {
     // Amogus2
     EntityID amogus2 = entity_manager.create();
@@ -165,46 +166,57 @@ int main(int argc, char *argv[]) {
     // Add TransformComponent to amogus2
     TransformComponent transform_component2;
     transform_component2.position =
-        vec2((1.0f + static_cast<float>(i)) * 32.0f, 64.0f);
-    transform_component2.rotation = 0.0f;
-    transform_component2.scale = vec2(1.0f, 1.0f);
+        vec2(16.0f + (static_cast<float>(WIDTH) - 32.0f) *
+                         position_distribution(random_engine),
+             16.0f + (static_cast<float>(HEIGHT) - 32.0f) *
+                         position_distribution(random_engine));
     transform_components[amogus2] = transform_component2;
 
     // Add RigidbodyComponent to amogus2
     RigidbodyComponent rigidbody_component2;
-    rigidbody_component2.aabb_top_left = vec2(-8.0f, -8.0f);
-    rigidbody_component2.aabb_bottom_right = vec2(8.0f, 8.0f);
+    rigidbody_component2.collision_aabb =
+        AABB(vec2(-8.0f, -8.0f), vec2(8.0f, 8.0f));
     rigidbody_component2.velocity =
-        vec2(velocity_magnitude * distribution(random_engine),
-             velocity_magnitude * distribution(random_engine));
+        vec2(velocity_magnitude * velocity_distribution(random_engine),
+             velocity_magnitude * velocity_distribution(random_engine));
     rigidbody_component2.gravity = vec2(0.0f, 256.0f);
     rigidbody_components[amogus2] = rigidbody_component2;
   }
   EntityID top_wall = entity_manager.create();
   StaticBodyComponent top_wall_staticbody_component;
-  top_wall_staticbody_component.aabb_top_left = vec2(0.0f, -16.0f);
-  top_wall_staticbody_component.aabb_bottom_right = vec2(WIDTH, 0.0f);
+  TransformComponent top_wall_transform_component;
+  top_wall_transform_component.position = vec2(WIDTH / 2.0f, -8.0f);
+  top_wall_staticbody_component.aabb_top_left = vec2(-WIDTH / 2.0f, -8.0f);
+  top_wall_staticbody_component.aabb_bottom_right = vec2(WIDTH / 2.0f, 8.0f);
   staticbody_components[top_wall] = top_wall_staticbody_component;
+  transform_components[top_wall] = top_wall_transform_component;
 
   EntityID bottom_wall = entity_manager.create();
   StaticBodyComponent bottom_wall_staticbody_component;
-  bottom_wall_staticbody_component.aabb_top_left = vec2(0, HEIGHT);
-  bottom_wall_staticbody_component.aabb_bottom_right =
-      vec2(WIDTH, HEIGHT + 16.0f);
+  TransformComponent bottom_wall_transform_component;
+  bottom_wall_transform_component.position = vec2(WIDTH / 2.0f, HEIGHT + 8.0f);
+  bottom_wall_staticbody_component.aabb_top_left = vec2(-WIDTH / 2.0f, -8.0f);
+  bottom_wall_staticbody_component.aabb_bottom_right = vec2(WIDTH / 2.0f, 8.0f);
   staticbody_components[bottom_wall] = bottom_wall_staticbody_component;
+  transform_components[bottom_wall] = bottom_wall_transform_component;
 
   EntityID left_wall = entity_manager.create();
   StaticBodyComponent left_wall_staticbody_component;
-  left_wall_staticbody_component.aabb_top_left = vec2(16.0f, 0.0f);
-  left_wall_staticbody_component.aabb_bottom_right = vec2(0.0f, HEIGHT);
+  TransformComponent left_wall_transform_component;
+  left_wall_transform_component.position = vec2(-8.0f, HEIGHT / 2.0f);
+  left_wall_staticbody_component.aabb_top_left = vec2(-8.0f, -HEIGHT / 2.0f);
+  left_wall_staticbody_component.aabb_bottom_right = vec2(8.0f, HEIGHT / 2.0f);
   staticbody_components[left_wall] = left_wall_staticbody_component;
+  transform_components[left_wall] = left_wall_transform_component;
 
   EntityID right_wall = entity_manager.create();
   StaticBodyComponent right_wall_staticbody_component;
-  right_wall_staticbody_component.aabb_top_left = vec2(WIDTH, 0.0f);
-  right_wall_staticbody_component.aabb_bottom_right =
-      vec2(WIDTH + 16.0f, HEIGHT);
+  TransformComponent right_wall_transform_component;
+  right_wall_transform_component.position = vec2(WIDTH + 8.0f, HEIGHT / 2.0f);
+  right_wall_staticbody_component.aabb_top_left = vec2(-8.0f, -HEIGHT / 2.0f);
+  right_wall_staticbody_component.aabb_bottom_right = vec2(8.0f, HEIGHT / 2.0f);
   staticbody_components[right_wall] = right_wall_staticbody_component;
+  transform_components[right_wall] = right_wall_transform_component;
 
   // Software buffer for screen pixels
   uint32_t back_buffer[WIDTH * HEIGHT];
