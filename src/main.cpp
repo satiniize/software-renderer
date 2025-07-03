@@ -180,6 +180,31 @@ int main(int argc, char *argv[]) {
     rigidbody_component2.gravity = vec2(0.0f, 256.0f);
     rigidbody_components[amogus2] = rigidbody_component2;
   }
+  EntityID top_wall = entity_manager.create();
+  StaticBodyComponent top_wall_staticbody_component;
+  top_wall_staticbody_component.aabb_top_left = vec2(0.0f, -16.0f);
+  top_wall_staticbody_component.aabb_bottom_right = vec2(WIDTH, 0.0f);
+  staticbody_components[top_wall] = top_wall_staticbody_component;
+
+  EntityID bottom_wall = entity_manager.create();
+  StaticBodyComponent bottom_wall_staticbody_component;
+  bottom_wall_staticbody_component.aabb_top_left = vec2(0, HEIGHT);
+  bottom_wall_staticbody_component.aabb_bottom_right =
+      vec2(WIDTH, HEIGHT + 16.0f);
+  staticbody_components[bottom_wall] = bottom_wall_staticbody_component;
+
+  EntityID left_wall = entity_manager.create();
+  StaticBodyComponent left_wall_staticbody_component;
+  left_wall_staticbody_component.aabb_top_left = vec2(16.0f, 0.0f);
+  left_wall_staticbody_component.aabb_bottom_right = vec2(0.0f, HEIGHT);
+  staticbody_components[left_wall] = left_wall_staticbody_component;
+
+  EntityID right_wall = entity_manager.create();
+  StaticBodyComponent right_wall_staticbody_component;
+  right_wall_staticbody_component.aabb_top_left = vec2(WIDTH, 0.0f);
+  right_wall_staticbody_component.aabb_bottom_right =
+      vec2(WIDTH + 16.0f, HEIGHT);
+  staticbody_components[right_wall] = right_wall_staticbody_component;
 
   // Software buffer for screen pixels
   uint32_t back_buffer[WIDTH * HEIGHT];
