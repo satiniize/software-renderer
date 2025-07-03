@@ -7,7 +7,6 @@
 
 namespace PhysicsSystem {
 
-// TODO: Do coefficient of restitution center of mass calculation
 void Update(float delta_time) {
   // Physics code will go here
 
@@ -33,24 +32,33 @@ void Update(float delta_time) {
       vec2 transformed_physics_aabb_bottom_right =
           rigidbody.aabb_bottom_right + transform.position;
 
+      vec2 collision_normal = vec2(0.0f, 0.0f);
       if (transformed_physics_aabb_top_left.x < 0) {
         transform.position.x += -transformed_physics_aabb_top_left.x;
-        rigidbody.velocity.x *= -coefficient_of_restitution;
+        collision_normal += vec2(1.0f, 0.0f);
+        // rigidbody.velocity.x *= -coefficient_of_restitution;
       }
       if (transformed_physics_aabb_bottom_right.x > WIDTH) {
         transform.position.x -=
             (transformed_physics_aabb_bottom_right.x - WIDTH);
-        rigidbody.velocity.x *= -coefficient_of_restitution;
+        collision_normal += vec2(-1.0f, 0.0f);
+        // rigidbody.velocity.x *= -coefficient_of_restitution;
       }
       if (transformed_physics_aabb_top_left.y < 0) {
         transform.position.y += -transformed_physics_aabb_top_left.y;
-        rigidbody.velocity.y *= -coefficient_of_restitution;
+        collision_normal += vec2(0.0f, 1.0f);
+        // rigidbody.velocity.y *= -coefficient_of_restitution;
       }
       if (transformed_physics_aabb_bottom_right.y > HEIGHT) {
         transform.position.y -=
             (transformed_physics_aabb_bottom_right.y - HEIGHT);
-        rigidbody.velocity.y *= -coefficient_of_restitution;
+        collision_normal += vec2(0.0f, -1.0f);
+        // rigidbody.velocity.y *= -coefficient_of_restitution;
       }
+      rigidbody.velocity +=
+          collision_normal *
+          rigidbody.velocity.dot(collision_normal.normalized()) *
+          -(1.0f + coefficient_of_restitution);
     }
   }
 
@@ -99,18 +107,39 @@ void Update(float delta_time) {
 
           // Resolve collision
           if (is_colliding) {
-            vec2 center_of_mass_velocity =
-                (rigidbody1.velocity * rigidbody1.mass +
-                 rigidbody2.velocity * rigidbody2.mass) /
-                (rigidbody1.mass + rigidbody2.mass);
-            rigidbody1.velocity =
-                center_of_mass_velocity * 2.0f - rigidbody1.velocity;
-            rigidbody2.velocity =
-                center_of_mass_velocity * 2.0f - rigidbody2.velocity;
-            // Determine the axis of shortest overlap
+
+            vec2 collision_normal;
+
+            if (x_overlap < y_overlap) {
+              collision_normal = vec2(1.0f, 0.0f);
+              if (transform1.position.x > transform2.position.x)
+                collision_normal = -collision_normal;
+            } else {
+              collision_normal = vec2(0.0f, 1.0f);
+              if (transform1.position.y > transform2.position.y)
+                collision_normal = -collision_normal;
+            }
+
+            vec2 relative_velocity = rigidbody1.velocity - rigidbody2.velocity;
+            float velocity_along_normal =
+                relative_velocity.dot(collision_normal);
+
+            if (velocity_along_normal > 0.0f) {
+              // 3. Calculate impulse scalar
+              float e = coefficient_of_restitution;
+              float j = -(1.0f + e) * velocity_along_normal;
+              j /= (1.0f / rigidbody1.mass) + (1.0f / rigidbody2.mass);
+
+              // 4. Apply impulse
+              vec2 impulse = collision_normal * j;
+              rigidbody1.velocity += impulse / rigidbody1.mass;
+              rigidbody2.velocity -= impulse / rigidbody2.mass;
+            }
+            // Push back objects so they dont intersect with each other
             if (x_overlap < y_overlap) {
               // Apply impulse along the x-axis
               float push_back = x_overlap * 0.5f;
+              // TODO: Apply friction along y axis
               if (transform1.position.x < transform2.position.x) {
                 transform1.position.x -= push_back;
                 transform2.position.x += push_back;
@@ -121,6 +150,7 @@ void Update(float delta_time) {
             } else {
               // Apply impulse along the y-axis
               float push_back = y_overlap * 0.5f;
+              // TODO: Apply friction along x axis
               if (transform1.position.y < transform2.position.y) {
                 transform1.position.y -= push_back;
                 transform2.position.y += push_back;

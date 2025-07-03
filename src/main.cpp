@@ -150,7 +150,7 @@ int main(int argc, char *argv[]) {
   std::mt19937 random_engine;
   std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
   float velocity_magnitude = 512.0f;
-  int friends = 16;
+  int friends = 8;
   for (int i = 0; i < friends; ++i) {
     // Amogus2
     EntityID amogus2 = entity_manager.create();
@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
     // Add TransformComponent to amogus2
     TransformComponent transform_component2;
     transform_component2.position =
-        vec2((1.0f + static_cast<float>(i)) * 16.0f, 0.0f);
+        vec2((1.0f + static_cast<float>(i)) * 32.0f, 64.0f);
     transform_component2.rotation = 0.0f;
     transform_component2.scale = vec2(1.0f, 1.0f);
     transform_components[amogus2] = transform_component2;
