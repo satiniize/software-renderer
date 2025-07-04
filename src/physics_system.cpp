@@ -4,11 +4,13 @@
 #include "transform_component.h"
 
 #include <algorithm>
+#include <iostream>
 
 namespace PhysicsSystem {
 
 void Update(float delta_time) {
-  float coefficient_of_restitution = 0.9f;
+  float coefficient_of_restitution = 0.5f;
+  float coefficient_of_friction = 0.5f;
   // Collide with rigid bodies and static bodies
   // Iterate over every rigid body
   for (auto it1 = rigidbody_components.begin();
@@ -80,13 +82,23 @@ void Update(float delta_time) {
       if (velocity_along_normal > 0.0f) {
         // 3. Calculate impulse scalar
         float e = coefficient_of_restitution;
-        float j = -(1.0f + e) * velocity_along_normal;
+        float j = (1.0f + e) * velocity_along_normal;
         j /= (1.0f / rigidbody1.mass) + (1.0f / rigidbody2.mass);
 
         // 4. Apply impulse
-        vec2 impulse = collision_normal * j;
+        vec2 impulse = collision_normal * -j;
         rigidbody1.velocity += impulse / rigidbody1.mass;
         rigidbody2.velocity -= impulse / rigidbody2.mass;
+        vec2 velocity_along_surface1 =
+            (rigidbody1.velocity -
+             collision_normal * rigidbody1.velocity.dot(collision_normal));
+        vec2 velocity_along_surface2 =
+            (rigidbody2.velocity -
+             collision_normal * rigidbody2.velocity.dot(collision_normal));
+        rigidbody1.velocity -=
+            velocity_along_surface1.normalized() * j * coefficient_of_friction;
+        rigidbody2.velocity -=
+            velocity_along_surface2.normalized() * j * coefficient_of_friction;
       }
       // Push back objects so they dont intersect with each other
       if (x_overlap < y_overlap) {
@@ -173,10 +185,16 @@ void Update(float delta_time) {
           transform1.position.y += push_back;
         }
       }
-      rigidbody1.velocity +=
-          collision_normal *
-          rigidbody1.velocity.dot(collision_normal.normalized()) *
-          -(1.0f + coefficient_of_restitution);
+      float impulse = rigidbody1.velocity.dot(collision_normal.normalized()) *
+                      (1.0f + coefficient_of_restitution);
+
+      rigidbody1.velocity -= collision_normal * impulse;
+      vec2 velocity_along_surface =
+          (rigidbody1.velocity -
+           collision_normal * rigidbody1.velocity.dot(collision_normal));
+      rigidbody1.velocity -= velocity_along_surface.normalized() *
+                             std::min(impulse * coefficient_of_friction,
+                                      velocity_along_surface.length());
     }
   }
 }
