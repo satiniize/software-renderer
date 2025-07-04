@@ -186,8 +186,8 @@ int main(int argc, char *argv[]) {
   StaticBodyComponent top_wall_staticbody_component;
   TransformComponent top_wall_transform_component;
   top_wall_transform_component.position = vec2(WIDTH / 2.0f, -8.0f);
-  top_wall_staticbody_component.aabb_top_left = vec2(-WIDTH / 2.0f, -8.0f);
-  top_wall_staticbody_component.aabb_bottom_right = vec2(WIDTH / 2.0f, 8.0f);
+  top_wall_staticbody_component.collision_aabb =
+      AABB(vec2(-WIDTH / 2.0f, -8.0f), vec2(WIDTH / 2.0f, 8.0f));
   staticbody_components[top_wall] = top_wall_staticbody_component;
   transform_components[top_wall] = top_wall_transform_component;
 
@@ -195,8 +195,8 @@ int main(int argc, char *argv[]) {
   StaticBodyComponent bottom_wall_staticbody_component;
   TransformComponent bottom_wall_transform_component;
   bottom_wall_transform_component.position = vec2(WIDTH / 2.0f, HEIGHT + 8.0f);
-  bottom_wall_staticbody_component.aabb_top_left = vec2(-WIDTH / 2.0f, -8.0f);
-  bottom_wall_staticbody_component.aabb_bottom_right = vec2(WIDTH / 2.0f, 8.0f);
+  bottom_wall_staticbody_component.collision_aabb =
+      AABB(vec2(-WIDTH / 2.0f, -8.0f), vec2(WIDTH / 2.0f, 8.0f));
   staticbody_components[bottom_wall] = bottom_wall_staticbody_component;
   transform_components[bottom_wall] = bottom_wall_transform_component;
 
@@ -204,8 +204,8 @@ int main(int argc, char *argv[]) {
   StaticBodyComponent left_wall_staticbody_component;
   TransformComponent left_wall_transform_component;
   left_wall_transform_component.position = vec2(-8.0f, HEIGHT / 2.0f);
-  left_wall_staticbody_component.aabb_top_left = vec2(-8.0f, -HEIGHT / 2.0f);
-  left_wall_staticbody_component.aabb_bottom_right = vec2(8.0f, HEIGHT / 2.0f);
+  left_wall_staticbody_component.collision_aabb =
+      AABB(vec2(-8.0f, -HEIGHT / 2.0f), vec2(8.0f, HEIGHT / 2.0f));
   staticbody_components[left_wall] = left_wall_staticbody_component;
   transform_components[left_wall] = left_wall_transform_component;
 
@@ -213,8 +213,8 @@ int main(int argc, char *argv[]) {
   StaticBodyComponent right_wall_staticbody_component;
   TransformComponent right_wall_transform_component;
   right_wall_transform_component.position = vec2(WIDTH + 8.0f, HEIGHT / 2.0f);
-  right_wall_staticbody_component.aabb_top_left = vec2(-8.0f, -HEIGHT / 2.0f);
-  right_wall_staticbody_component.aabb_bottom_right = vec2(8.0f, HEIGHT / 2.0f);
+  right_wall_staticbody_component.collision_aabb =
+      AABB(vec2(-8.0f, -HEIGHT / 2.0f), vec2(8.0f, HEIGHT / 2.0f));
   staticbody_components[right_wall] = right_wall_staticbody_component;
   transform_components[right_wall] = right_wall_transform_component;
 
