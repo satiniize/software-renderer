@@ -12,5 +12,5 @@
 
 inline std::unordered_map<EntityID, SpriteComponent> sprite_components;
 inline std::unordered_map<EntityID, TransformComponent> transform_components;
-inline std::unordered_map<EntityID, RigidbodyComponent> rigidbody_components;
+inline std::unordered_map<EntityID, RigidBodyComponent> rigidbody_components;
 inline std::unordered_map<EntityID, StaticBodyComponent> staticbody_components;

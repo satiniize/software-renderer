@@ -134,31 +134,30 @@ int main(int argc, char *argv[]) {
 
   // Add TransformComponent to amogus
   TransformComponent transform_component;
-  transform_component.position = vec2(0.0f, 0.0f);
+  transform_component.position = vec2(64.0f, 64.0f);
   transform_component.rotation = 0.0f;
   transform_component.scale = vec2(1.0f, 1.0f);
   transform_components[amogus] = transform_component;
 
-  // Add RigidbodyComponent to amogus
-  RigidbodyComponent rigidbody_component;
+  // Add RigidBodyComponent to amogus
+  RigidBodyComponent rigidbody_component;
   rigidbody_component.collision_aabb =
       AABB(vec2(-8.0f, -8.0f), vec2(8.0f, 8.0f));
   rigidbody_component.velocity = vec2(0.0f, 0.0f);
-  rigidbody_component.gravity = vec2(0.0f, 256.0f);
   rigidbody_components[amogus] = rigidbody_component;
 
   std::mt19937 random_engine;
   std::uniform_real_distribution<float> velocity_distribution(-1.0f, 1.0f);
   std::uniform_real_distribution<float> position_distribution(0.0f, 1.0f);
   float velocity_magnitude = 512.0f;
-  int friends = 32;
+  int friends = 16;
   for (int i = 0; i < friends; ++i) {
     // Amogus2
     EntityID amogus2 = entity_manager.create();
 
     // Add SpriteComponent to amogus2
     SpriteComponent sprite_component2;
-    sprite_component2.bitmap = bmp_write;
+    sprite_component2.bitmap = bmp_read;
     sprite_component2.size = vec2(static_cast<float>(bitmap_read_width),
                                   static_cast<float>(bitmap_read_height));
     sprite_components[amogus2] = sprite_component2;
@@ -172,14 +171,13 @@ int main(int argc, char *argv[]) {
                          position_distribution(random_engine));
     transform_components[amogus2] = transform_component2;
 
-    // Add RigidbodyComponent to amogus2
-    RigidbodyComponent rigidbody_component2;
+    // Add RigidBodyComponent to amogus2
+    RigidBodyComponent rigidbody_component2;
     rigidbody_component2.collision_aabb =
         AABB(vec2(-8.0f, -8.0f), vec2(8.0f, 8.0f));
     rigidbody_component2.velocity =
         vec2(velocity_magnitude * velocity_distribution(random_engine),
              velocity_magnitude * velocity_distribution(random_engine));
-    rigidbody_component2.gravity = vec2(0.0f, 256.0f);
     rigidbody_components[amogus2] = rigidbody_component2;
   }
   EntityID top_wall = entity_manager.create();
@@ -221,7 +219,7 @@ int main(int argc, char *argv[]) {
   // Software buffer for screen pixels
   uint32_t back_buffer[WIDTH * HEIGHT];
 
-  float physics_frame_rate = 120.0f;
+  float physics_frame_rate = 60.0f;
 
   uint32_t prev_frame_tick = SDL_GetTicks();
   float physics_delta_time = 1.0f / physics_frame_rate;
@@ -230,6 +228,7 @@ int main(int argc, char *argv[]) {
 
   int physics_frame_count = 0;
   int process_frame_count = 0;
+  float time_scale = 1.0f;
 
   bool running = true;
 
@@ -250,8 +249,8 @@ int main(int argc, char *argv[]) {
     const bool *keystate = SDL_GetKeyboardState(NULL);
 
     ++process_frame_count;
-    if (accumulator >= physics_delta_time) {
-      accumulator -= physics_delta_time;
+    if (accumulator >= (physics_delta_time / time_scale)) {
+      accumulator -= (physics_delta_time / time_scale);
       ++physics_frame_count;
       if (physics_frame_count >= static_cast<int>(physics_frame_rate)) {
         SDL_Log("FPS: %d", static_cast<int>(process_frame_count));
@@ -260,7 +259,7 @@ int main(int argc, char *argv[]) {
       }
       // Get entity transform and rigidbody
       TransformComponent &amogus_transform = transform_components[amogus];
-      RigidbodyComponent &amogus_rigidbody = rigidbody_components[amogus];
+      RigidBodyComponent &amogus_rigidbody = rigidbody_components[amogus];
 
       // Player specific code
       // WASD Movement
