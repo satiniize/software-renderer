@@ -12,6 +12,8 @@
 #include "bitmap.h"
 #include "vec2.h"
 
+#include "variables.h"
+
 // Entities
 #include "component_storage.h"
 #include "entity_manager.h"
@@ -24,6 +26,89 @@
 #include "rigidbody_component.h"
 #include "sprite_component.h"
 #include "transform_component.h"
+
+SDL_Window *window;
+SDL_GPUDevice *device;
+SDL_Renderer *renderer;
+SDL_Texture *texture;
+
+const int scale = 4;
+
+// Software buffer for screen pixels
+uint32_t back_buffer[WIDTH * HEIGHT];
+
+int init() {
+  // SDL setup
+  if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+    SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
+    return 1;
+  }
+  SDL_Log("SDL video driver: %s", SDL_GetCurrentVideoDriver());
+
+  // Scale up for visibility
+  window = SDL_CreateWindow("Checkerboard", WIDTH * scale, HEIGHT * scale, 0);
+  if (!window) {
+    SDL_Log("Couldn't create window: %s", SDL_GetError());
+    SDL_Quit();
+    return 1;
+  }
+
+  // SDL_GPU
+  device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL);
+  SDL_ClaimWindowForGPUDevice(device, window);
+
+  SDL_GPUCommandBuffer *commandBuffer = SDL_AcquireGPUCommandBuffer(device);
+
+  SDL_SubmitGPUCommandBuffer(commandBuffer);
+
+  // SDL_GPUTextureCreateInfo *gpu_texture_create_info;
+
+  // SDL_GPUTexture *gpu_texture =
+  //     SDL_CreateGPUTexture(device, gpu_texture_create_info);
+
+  renderer = SDL_CreateRenderer(window, NULL);
+  if (!renderer) {
+    SDL_Log("Couldn't create renderer: %s", SDL_GetError());
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 1;
+  }
+
+  texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
+                              SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
+  SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
+  if (!texture) {
+    SDL_Log("Couldn't create texture: %s", SDL_GetError());
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 1;
+  }
+  return 0;
+}
+
+void loop() {
+  // Upload pixel buffer to texture
+  void *front_buffer;
+  int pitch;
+  SDL_LockTexture(texture, NULL, &front_buffer, &pitch);
+  memcpy(front_buffer, back_buffer, WIDTH * HEIGHT * sizeof(uint32_t));
+  SDL_UnlockTexture(texture);
+
+  // --- Render the texture to the window ---
+  SDL_RenderClear(renderer);
+  SDL_FRect dst = {0, 0, WIDTH * scale, HEIGHT * scale};
+  SDL_RenderTexture(renderer, texture, NULL, &dst);
+  SDL_RenderPresent(renderer);
+}
+
+void cleanup() {
+  SDL_DestroyGPUDevice(device);
+  SDL_DestroyTexture(texture);
+  SDL_DestroyRenderer(renderer);
+  SDL_DestroyWindow(window);
+  SDL_Quit();
+}
 
 int main(int argc, char *argv[]) {
   std::string bitmap_write_name = "test_image_write.bmp";
@@ -58,66 +143,13 @@ int main(int argc, char *argv[]) {
   int bitmap_read_width = bmp_read.get_width();
   int bitmap_read_height = bmp_read.get_height();
 
-  if (bitmap_read_width == 0 || bitmap_read_height == 0) {
-    std::cerr << "Failed to open image file.\n";
-    return 1;
-  }
-
-  std::vector<uint32_t> bitmap_read_pixels = bmp_read.get_pixels();
-
   std::cout << "Width: " << bitmap_read_width << std::endl;
   std::cout << "Height: " << bitmap_read_height << std::endl;
-  std::cout << "Pixels: " << bitmap_read_pixels.size() << std::endl;
 
-  // SDL setup
-  if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-    SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
-    return 1;
-  }
-  SDL_Log("SDL video driver: %s", SDL_GetCurrentVideoDriver());
+  int success = init();
 
-  // Scale up for visibility
-  const int scale = 4;
-  SDL_Window *window =
-      SDL_CreateWindow("Checkerboard", WIDTH * scale, HEIGHT * scale, 0);
-  if (!window) {
-    SDL_Log("Couldn't create window: %s", SDL_GetError());
-    SDL_Quit();
-    return 1;
-  }
-
-  // SDL_GPU
-  SDL_GPUDevice *device =
-      SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL);
-  SDL_ClaimWindowForGPUDevice(device, window);
-
-  SDL_GPUCommandBuffer *commandBuffer = SDL_AcquireGPUCommandBuffer(device);
-
-  SDL_SubmitGPUCommandBuffer(commandBuffer);
-
-  // SDL_GPUTextureCreateInfo *gpu_texture_create_info;
-
-  // SDL_GPUTexture *gpu_texture =
-  //     SDL_CreateGPUTexture(device, gpu_texture_create_info);
-
-  SDL_Renderer *renderer = SDL_CreateRenderer(window, NULL);
-  if (!renderer) {
-    SDL_Log("Couldn't create renderer: %s", SDL_GetError());
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    return 1;
-  }
-
-  SDL_Texture *texture =
-      SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
-                        SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
-  SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
-  if (!texture) {
-    SDL_Log("Couldn't create texture: %s", SDL_GetError());
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    return 1;
+  if (success != 0) {
+    return success;
   }
 
   EntityManager entity_manager;
@@ -128,6 +160,7 @@ int main(int argc, char *argv[]) {
   // Add SpriteComponent to amogus
   SpriteComponent sprite_component;
   sprite_component.bitmap = bmp_read;
+  // TODO: move this to a setter somehow?
   sprite_component.size = vec2(static_cast<float>(bitmap_read_width),
                                static_cast<float>(bitmap_read_height));
   sprite_components[amogus] = sprite_component;
@@ -216,13 +249,10 @@ int main(int argc, char *argv[]) {
   staticbody_components[right_wall] = right_wall_staticbody_component;
   transform_components[right_wall] = right_wall_transform_component;
 
-  // Software buffer for screen pixels
-  uint32_t back_buffer[WIDTH * HEIGHT];
-
-  float physics_frame_rate = 60.0f;
+  // float physics_frame_rate = 60.0f;
 
   uint32_t prev_frame_tick = SDL_GetTicks();
-  float physics_delta_time = 1.0f / physics_frame_rate;
+  float physics_delta_time = 1.0f / physics_tick_rate;
   float process_delta_time = 0.0f;
   float accumulator = 0.0;
 
@@ -252,7 +282,7 @@ int main(int argc, char *argv[]) {
     if (accumulator >= (physics_delta_time / time_scale)) {
       accumulator -= (physics_delta_time / time_scale);
       ++physics_frame_count;
-      if (physics_frame_count >= static_cast<int>(physics_frame_rate)) {
+      if (physics_frame_count >= static_cast<int>(physics_tick_rate)) {
         SDL_Log("FPS: %d", static_cast<int>(process_frame_count));
         physics_frame_count = 0;
         process_frame_count = 0;
@@ -300,23 +330,8 @@ int main(int argc, char *argv[]) {
     SpriteSystem::update_aabbs();
     SpriteSystem::draw_all(back_buffer, WIDTH, HEIGHT);
 
-    // Upload pixel buffer to texture
-    void *front_buffer;
-    int pitch;
-    SDL_LockTexture(texture, NULL, &front_buffer, &pitch);
-    memcpy(front_buffer, back_buffer, WIDTH * HEIGHT * sizeof(uint32_t));
-    SDL_UnlockTexture(texture);
-
-    // --- Render the texture to the window ---
-    SDL_RenderClear(renderer);
-    SDL_FRect dst = {0, 0, WIDTH * scale, HEIGHT * scale};
-    SDL_RenderTexture(renderer, texture, NULL, &dst);
-    SDL_RenderPresent(renderer);
+    loop();
   }
-  SDL_DestroyGPUDevice(device);
-  SDL_DestroyTexture(texture);
-  SDL_DestroyRenderer(renderer);
-  SDL_DestroyWindow(window);
-  SDL_Quit();
+  cleanup();
   return 0;
 }

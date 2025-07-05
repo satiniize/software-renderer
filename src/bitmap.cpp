@@ -106,7 +106,8 @@ bool Bitmap::load(const std::string &filename) {
   uint16_t bit_count = read_u16(in);
   uint32_t compression = read_u32(in);
 
-  if (planes != 1 || bit_count != 24 || compression != 0)
+  if (planes != 1 || bit_count != 24 || compression != 0 || width == 0 ||
+      height == 0)
     return false;
 
   // Skip any extra DIB header bytes
@@ -139,5 +140,6 @@ bool Bitmap::load(const std::string &filename) {
   }
 
   in.close();
+
   return true;
 }
