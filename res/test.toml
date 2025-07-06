@@ -1,0 +1,33 @@
+# Simple TOML Example
+
+# {
+#     "title": "Simple Example",
+#     "version": 1.0,
+#     "active": True,
+#     "numbers": [1, 2, 3, 4],
+#     "owner": {
+#         "name": "Alice",
+#         "age": 28
+#     },
+#     "database": {
+#         "server": "localhost",
+#         "port": 5432
+#     }
+# }
+
+title = "Simple Example"
+version = 1.0
+active = true
+
+# An array of numbers
+numbers = [1, 2, 3, 4]
+
+# A table
+[owner]
+name = "Alice"
+age = 28
+
+# Another table
+[database]
+server = "localhost"
+port = 5432
