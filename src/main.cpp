@@ -1,354 +1,70 @@
-#include <cmath>
+#include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <sstream>
+#include <mutex>
+#include <queue>
 #include <string>
-#include <sys/types.h>
+#include <thread>
 #include <vector>
 
 // Libraries
-#include "SDL3/SDL_log.h"
-#include "SDL3/SDL_surface.h"
-#include "SDL3_image/SDL_image.h"
-#include "turbojpeg.h"
-
+#include <SDL3/SDL.h>
 #define CLAY_IMPLEMENTATION
 #include "clay.h"
 #include "tinyfiledialogs.h"
 
+// Resources
+#include "image.hpp"
+#include "texture.hpp"
+
+// Helpers
 #include "clay_renderer.hpp"
-#include "config.hpp"
+#include "image_loader.hpp"
 #include "renderer.hpp"
+#include "sprite_renderer.hpp"
 
-// Entities
-#include "component_storage.hpp"
+// ECS
 #include "entity_manager.hpp"
-
-// Systems
-#include "sprite_system.hpp"
-
 // Components
 #include "sprite_component.hpp"
 #include "transform_component.hpp"
 
-const Clay_Color COLOR_WHITE = {192, 192, 192, 255};
-const Clay_Color COLOR_BLACK = {12, 12, 12, 255};
-const Clay_Color COLOR_GREY = {96, 96, 96, 255};
-const Clay_Color COLOR_DARK_GREY = {24, 24, 24, 255};
-const Clay_Color COLOR_PURE_WHITE = {255, 255, 255, 255};
+// UI
+#include "ui/components/bottom_bar.hpp"
+#include "ui/components/photo_grid.hpp"
+#include "ui/components/placeholder.hpp"
+#include "ui/theme.hpp"
+#include "ui/types/photo.hpp"
 
-const Clay_Color COLOR_LIGHT_GREY = {160, 160, 160, 255};
-const Clay_Color COLOR_TRANSPARENT = {255, 255, 255, 0};
-const Clay_Color COLOR_SELECTED_GREEN = {127, 255, 0, 255};
-
-uint16_t shut_up_data[1];
-
-Renderer renderer;
-
-ImageData edge_sheen_data;
-ImageData carbon_fiber_data;
-ImageData vignette_data;
-ImageData bg_sheen_data;
-ImageData check_data;
-
-struct Photo {
-  ImageData image_data;
-  bool selected;
-  std::filesystem::path file_path;
+struct PendingTexture {
+  Image image;
+  std::filesystem::path path;
+  bool tiling = false;
 };
 
-// std::string photos_root_path = "res/FUJI/";
-std::vector<Photo> photos;
-bool folder_opened = false;
+struct AppState {
+  bool folder_opened = false;
+  std::string tally_label = "XX";
+  std::vector<Photo> photos;
 
-std::string tally_label;
+  std::queue<PendingTexture> upload_queue;
+  std::mutex upload_mutex;
+  std::thread load_thread;
+  std::atomic<bool> loading_done = false;
+};
 
-// Technically very inefficient, not sure
-int get_selected_photos_count() {
-  int count = 0;
-  for (auto photo : photos) {
-    if (photo.selected) {
-      count++;
+void load_images_worker(const std::vector<std::filesystem::path> &paths,
+                        AppState *app_state) {
+  for (const auto &path : paths) {
+    Image image = ImageLoader::load_with_turbojpeg(path);
+    {
+      std::lock_guard<std::mutex> lock(app_state->upload_mutex);
+      app_state->upload_queue.push({std::move(image), path, false});
     }
   }
-  return count;
-}
-
-bool seperate_photos(std::vector<Photo> &photos) {
-  std::filesystem::path root_path(photos[0].file_path.parent_path());
-
-  std::filesystem::create_directories(root_path / "Curated");
-  std::filesystem::create_directories(root_path / "Discarded");
-
-  for (auto &photo : photos) {
-    if (photo.selected) {
-      std::filesystem::copy_file(
-          photo.file_path, root_path / "Curated" / photo.file_path.filename(),
-          std::filesystem::copy_options::overwrite_existing);
-    } else {
-      std::filesystem::copy_file(
-          photo.file_path, root_path / "Discarded" / photo.file_path.filename(),
-          std::filesystem::copy_options::overwrite_existing);
-    }
-    std::filesystem::remove(photo.file_path);
-  }
-  return true;
-}
-
-bool load_photos(std::filesystem::path path) {
-  if (!std::filesystem::exists(path) && std::filesystem::is_directory(path)) {
-    SDL_Log("Invalid photo path");
-    return 1;
-  }
-
-  photos.clear();
-
-  for (const std::filesystem::directory_entry &entry :
-       std::filesystem::directory_iterator(path)) {
-    if (entry.is_regular_file()) {
-      SDL_Log("Loading file: %s", entry.path().c_str());
-      // std::cout << "Loading file: " << entry.path() << std::endl;
-
-      ImageData photo_image_data{};
-      photo_image_data.path = entry.path().string();
-      photo_image_data.tiling = false;
-
-      Photo photo{};
-      photo.image_data = photo_image_data;
-      photo.selected = false;
-      photo.file_path = entry.path();
-
-      photos.push_back(photo);
-
-      std::ifstream jpegStream(entry.path());
-      if (!jpegStream.is_open()) {
-        SDL_Log("ERROR: opening input file %s: %s", entry.path().c_str(),
-                strerror(errno));
-      }
-
-      jpegStream.seekg(0, std::ios::end);
-      std::streampos size = jpegStream.tellg();
-      if (size == 0) {
-        SDL_Log("WARNING: Input file contains no data");
-      }
-      jpegStream.seekg(0, std::ios::beg);
-      size_t jpegSize = static_cast<size_t>(size);
-
-      unsigned char *jpegBuf = (unsigned char *)malloc(jpegSize);
-      if (!jpegBuf) {
-        SDL_Log("ERROR: allocating JPEG buffer");
-      }
-
-      jpegStream.read(reinterpret_cast<char *>(jpegBuf), jpegSize);
-      jpegStream.close();
-
-      // 2. Initialize TurboJPEG decompressor
-      tjhandle tjInstance = tj3Init(TJINIT_DECOMPRESS);
-      if (!tjInstance) {
-        SDL_Log("ERROR: creating TurboJPEG instance");
-      }
-
-      // 3. Read JPEG header to get image info
-      int jpegWidth, jpegHeight, jpegSubsamp, jpegColorspace, jpegPrecision;
-      if (tj3DecompressHeader(tjInstance, jpegBuf, jpegSize) < 0) {
-        SDL_Log("ERROR: reading JPEG header for %s: %s", entry.path().c_str(),
-                tj3GetErrorStr(tjInstance));
-      }
-
-      jpegWidth = tj3Get(tjInstance, TJPARAM_JPEGWIDTH);
-      jpegHeight = tj3Get(tjInstance, TJPARAM_JPEGHEIGHT);
-      jpegSubsamp = tj3Get(tjInstance, TJPARAM_SUBSAMP);
-      jpegColorspace = tj3Get(tjInstance, TJPARAM_COLORSPACE);
-      jpegPrecision = tj3Get(tjInstance, TJPARAM_PRECISION);
-
-      // --- Prepare for Decompression and SDL Surface Creation ---
-      // We'll target 8-bit per channel output for SDL_Surface compatibility.
-      // If the JPEG is higher precision, we'll convert it.
-
-      // For general compatibility, decompres to BGRX (32-bit per pixel)
-      // For some reason, the backwards thing here happens again
-      int tjDecompressFormat = TJPF_RGBA;
-      SDL_PixelFormat sdlPixelFormat = SDL_PIXELFORMAT_ABGR8888;
-      int sdlPixelSize =
-          tjPixelSize[tjDecompressFormat]; // Will be 4 bytes for TJPF_BGRX
-
-      // Check for higher precision JPEGs
-      unsigned char *decompressedBuf_8bit =
-          NULL; // This will hold the final 8-bit data for SDL
-      void *tjOutputRawBuf = NULL; // Intermediate buffer if precision > 8
-      int tjOutputRawBufSize = 0;
-
-      // 8 Bit
-      if (jpegPrecision <= 8) {
-        tjOutputRawBufSize =
-            jpegWidth * jpegHeight * sdlPixelSize; // Size for 8-bit data
-        tjOutputRawBuf = malloc(tjOutputRawBufSize);
-        if (!tjOutputRawBuf) {
-          SDL_Log("ERROR: allocating 8-bit TurboJPEG output buffer for %s: %s",
-                  entry.path().c_str(), strerror(errno));
-          // goto cleanup_loop;
-        }
-        if (tj3Decompress8(tjInstance, jpegBuf, jpegSize,
-                           (unsigned char *)tjOutputRawBuf, 0,
-                           tjDecompressFormat) < 0) {
-          SDL_Log("ERROR: decompressing 8-bit JPEG image %s: %s",
-                  entry.path().c_str(), tj3GetErrorStr(tjInstance));
-          free(tjOutputRawBuf); // Decompression failed, free buffer
-          // goto cleanup_loop;
-        }
-        decompressedBuf_8bit =
-            (unsigned char *)tjOutputRawBuf; // Direct use for 8-bit
-        // SDL will take ownership of decompressedBuf_8bit later, so don't free
-        // it here
-        tjOutputRawBuf =
-            NULL; // Clear pointer to prevent double free via cleanup_loop
-      } else {    // Handle 12 or 16-bit JPEGs, convert to 8-bit for SDL
-        SDL_Log("WARNING: JPEG %s has precision %d > 8 bits. Converting to "
-                "8-bit per channel.",
-                entry.path().c_str(), jpegPrecision);
-
-        // TurboJPEG outputs unsigned short for precision > 8
-        int tjIntermediatePixelSize_16bit =
-            tjPixelSize[tjDecompressFormat] *
-            sizeof(unsigned short); // e.g., 4 channels * 2 bytes/channel = 8
-                                    // bytes/pixel
-        tjOutputRawBufSize =
-            jpegWidth * jpegHeight * tjIntermediatePixelSize_16bit;
-        tjOutputRawBuf = malloc(tjOutputRawBufSize);
-        if (!tjOutputRawBuf) {
-          SDL_Log("ERROR: allocating 16-bit TurboJPEG intermediate buffer for "
-                  "%s: %s",
-                  entry.path().c_str(), strerror(errno));
-          // goto cleanup_loop;
-        }
-
-        // 12 Bit
-        if (jpegPrecision <= 12) {
-          if (tj3Decompress12(tjInstance, jpegBuf, jpegSize,
-                              (short int *)tjOutputRawBuf, 0,
-                              tjDecompressFormat) < 0) {
-            SDL_Log("ERROR: decompressing 12-bit JPEG image %s: %s",
-                    entry.path().c_str(), tj3GetErrorStr(tjInstance));
-            free(tjOutputRawBuf);
-            // goto cleanup_loop;
-          }
-          // 12 Bit
-        } else { // Assume precision <= 16
-          if (tj3Decompress16(tjInstance, jpegBuf, jpegSize,
-                              (unsigned short *)tjOutputRawBuf, 0,
-                              tjDecompressFormat) < 0) {
-            SDL_Log("ERROR: decompressing 16-bit JPEG image %s: %s",
-                    entry.path().c_str(), tj3GetErrorStr(tjInstance));
-            free(tjOutputRawBuf);
-            // goto cleanup_loop;
-          }
-        }
-
-        // Now, convert the 16-bit (unsigned short) tjOutputRawBuf to 8-bit
-        // (unsigned char) decompressedBuf_8bit
-        decompressedBuf_8bit = (unsigned char *)malloc(
-            jpegWidth * jpegHeight * sdlPixelSize); // Final 8-bit size
-        if (!decompressedBuf_8bit) {
-          SDL_Log("ERROR: allocating 8-bit conversion buffer for %s: %s",
-                  entry.path().c_str(), strerror(errno));
-          free(tjOutputRawBuf);
-          // goto cleanup_loop;
-        }
-
-        unsigned short *src_ptr = (unsigned short *)tjOutputRawBuf;
-        unsigned char *dst_ptr = decompressedBuf_8bit;
-
-        // Loop through pixels and convert
-        for (int i = 0; i < jpegWidth * jpegHeight; ++i) {
-          // Assuming TJPF_BGRX output (4 channels per pixel)
-          *dst_ptr++ = (unsigned char)(*src_ptr++ >> 8); // B
-          *dst_ptr++ = (unsigned char)(*src_ptr++ >> 8); // G
-          *dst_ptr++ = (unsigned char)(*src_ptr++ >> 8); // R
-          *dst_ptr++ = (unsigned char)0xFF; // X/Alpha (fully opaque)
-        }
-        free(tjOutputRawBuf); // Free the intermediate 16-bit buffer
-        tjOutputRawBuf = NULL;
-      }
-
-      // 4. Create an SDL_Surface from the decompressed 8-bit data
-      // Using the new SDL3 function: SDL_CreateSurfaceFrom
-      SDL_Surface *original_image_surface = SDL_CreateSurfaceFrom(
-          jpegWidth,      // Width
-          jpegHeight,     // Height
-          sdlPixelFormat, // SDL Pixel Format (e.g., SDL_PIXELFORMAT_BGRX8888)
-          decompressedBuf_8bit,    // Pointer to existing pixel data (8-bit)
-          jpegWidth * sdlPixelSize // Pitch (bytes per row)
-      );
-
-      // Important: According to SDL3 wiki for SDL_CreateSurfaceFrom,
-      // "Pixel data is not managed automatically; you must free the surface
-      // before you free the pixel data."
-      // This means SDL *does NOT* take ownership of decompressedBuf_8bit,
-      // and we MUST free it ourselves *after* Destroying
-      // original_image_surface. This is a crucial change from SDL2's
-      // SDL_CreateRGBSurfaceWithFormatFrom!
-
-      if (original_image_surface == NULL) {
-        SDL_Log("ERROR: Failed to create SDL_Surface from decompressed data "
-                "for %s: %s",
-                entry.path().c_str(), SDL_GetError());
-        free(decompressedBuf_8bit); // SDL didn't take ownership, so we must
-                                    // free.
-        // goto cleanup_loop;
-      }
-
-      // 5. Downsample the image
-      int downsample_factor = 10;
-      int thumbWidth = original_image_surface->w / downsample_factor;
-      int thumbHeight = original_image_surface->h / downsample_factor;
-      if (thumbWidth == 0)
-        thumbWidth = 1; // Ensure minimum 1 pixel
-      if (thumbHeight == 0)
-        thumbHeight = 1;
-
-      SDL_Surface *downsampled = SDL_CreateSurface(
-          thumbWidth, thumbHeight,
-          original_image_surface
-              ->format); // SDL_CreateSurface (new in SDL3 for simpler creation)
-
-      if (downsampled == NULL) {
-        SDL_Log("ERROR: Failed to create downsampled SDL_Surface for %s: %s",
-                entry.path().c_str(), SDL_GetError());
-        SDL_DestroySurface(original_image_surface);
-        free(decompressedBuf_8bit); // Must free this explicitly!
-        // goto cleanup_loop;
-      }
-
-      SDL_Rect src_rect = {0, 0, original_image_surface->w,
-                           original_image_surface->h};
-      SDL_Rect dst_rect = {0, 0, thumbWidth, thumbHeight};
-
-      if (!SDL_BlitSurfaceScaled(original_image_surface, &src_rect, downsampled,
-                                 &dst_rect, SDL_SCALEMODE_LINEAR)) {
-        SDL_Log("ERROR: Failed to scale surface for %s: %s",
-                entry.path().c_str(), SDL_GetError());
-        SDL_DestroySurface(original_image_surface);
-        free(decompressedBuf_8bit); // Must free this explicitly!
-        SDL_DestroySurface(downsampled);
-        // goto cleanup_loop;
-      }
-
-      // 6. Load texture into your renderer
-      renderer.load_texture(entry.path().string(), downsampled);
-
-      // 7. Clean up surfaces and TurboJPEG instance
-      SDL_DestroySurface(original_image_surface);
-      free(decompressedBuf_8bit); // CRITICAL: Free the buffer that
-                                  // original_image_surface pointed to
-      SDL_DestroySurface(downsampled);
-      free(jpegBuf);
-      tj3Destroy(tjInstance);
-    }
-  }
-
-  return true;
-}
+  app_state->loading_done = true;
+};
 
 void handle_clay_errors(Clay_ErrorData errorData) {
   // See the Clay_ErrorData struct for more information
@@ -373,31 +89,9 @@ void handle_clay_errors(Clay_ErrorData errorData) {
   }
 }
 
-void handle_photo_item_interaction(Clay_ElementId elementId,
-                                   Clay_PointerData pointerInfo,
-                                   intptr_t userData) {
-  Photo *photo = (Photo *)userData;
-  // Pointer state allows you to detect mouse down / hold / release
-  if (pointerInfo.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
-    photo->selected = !photo->selected;
-    // Do some click handling
-    // NavigateTo(buttonData->link);
-  }
-}
-
-void handle_finalize_button_interaction(Clay_ElementId elementId,
-                                        Clay_PointerData pointerInfo,
-                                        intptr_t userData) {
-  if (pointerInfo.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
-    seperate_photos(photos);
-    folder_opened = false;
-    photos.clear();
-  }
-}
-
-void handle_open_folder_button_interaction(Clay_ElementId elementId,
-                                           Clay_PointerData pointerInfo,
-                                           intptr_t userData) {
+// TODO: Figure out how to make tinyfd threaded
+void on_open_folder(Clay_ElementId elementId, Clay_PointerData pointerInfo,
+                    intptr_t userData) {
   if (pointerInfo.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
 
     char *lTheSelectFolderName = tinyfd_selectFolderDialog(
@@ -407,709 +101,135 @@ void handle_open_folder_button_interaction(Clay_ElementId elementId,
       return;
     }
 
-    folder_opened = true;
+    AppState *app_state = (AppState *)userData;
+    app_state->folder_opened = true;
 
     std::filesystem::path folder_path(lTheSelectFolderName);
 
-    load_photos(folder_path);
+    std::vector<std::filesystem::path> paths_to_load;
+
+    for (const auto &entry : std::filesystem::directory_iterator(folder_path)) {
+      paths_to_load.push_back(entry);
+    }
+
+    app_state->load_thread =
+        std::thread(load_images_worker, std::move(paths_to_load), app_state);
   }
 }
 
-void handle_sort_button_interaction(Clay_ElementId elementId,
-                                    Clay_PointerData pointerInfo,
-                                    intptr_t userData) {
+void on_finalize(Clay_ElementId elementId, Clay_PointerData pointerInfo,
+                 intptr_t userData) {
+  if (pointerInfo.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
+    // seperate_photos(photos);
+    // folder_opened = false;
+    // photos.clear();
+  }
+}
+
+void on_sort(Clay_ElementId elementId, Clay_PointerData pointerInfo,
+             intptr_t userData) {
   if (pointerInfo.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
     // seperate_photos(photos);
   }
 }
 
-void handle_filters_button_interaction(Clay_ElementId elementId,
-                                       Clay_PointerData pointerInfo,
-                                       intptr_t userData) {
+void on_filter(Clay_ElementId elementId, Clay_PointerData pointerInfo,
+               intptr_t userData) {
   if (pointerInfo.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
     // seperate_photos(photos);
-  }
-}
-
-// TODO: Change hover to full photo rect, current selection is too small
-inline void PhotoItem(Photo &photo) {
-  uint16_t corner_radius = 16;
-  uint16_t checkbox_corner_radius = 5;
-  CLAY({
-      .layout =
-          {
-              .sizing = {.width = CLAY_SIZING_GROW(0),
-                         .height = CLAY_SIZING_GROW(0)},
-              .padding = CLAY_PADDING_ALL(3),
-              .childGap = 8,
-              .childAlignment =
-                  {
-                      .x = CLAY_ALIGN_X_CENTER,
-                      .y = CLAY_ALIGN_Y_TOP,
-                  },
-              .layoutDirection = CLAY_TOP_TO_BOTTOM,
-          },
-      .backgroundColor =
-          photo.selected ? COLOR_SELECTED_GREEN : COLOR_PURE_WHITE,
-      .cornerRadius = CLAY_CORNER_RADIUS(static_cast<float>(corner_radius)),
-      .image =
-          {
-              .imageData = static_cast<void *>(&edge_sheen_data),
-          },
-      .border =
-          {
-              .color = COLOR_BLACK,
-              .width =
-                  {
-                      .left = 2,
-                      .right = 2,
-                      .top = 2,
-                      .bottom = 2,
-                  },
-          },
-  }) {
-    Clay_OnHover(handle_photo_item_interaction, (intptr_t)&photo);
-    CLAY({
-        .layout =
-            {
-                .sizing = {.width = CLAY_SIZING_GROW(0),
-                           .height = CLAY_SIZING_GROW(0)},
-                .padding = CLAY_PADDING_ALL(static_cast<uint16_t>(
-                    corner_radius - 3 - checkbox_corner_radius)),
-            },
-        .backgroundColor = COLOR_PURE_WHITE,
-        .cornerRadius =
-            CLAY_CORNER_RADIUS(static_cast<float>(corner_radius - 3)),
-        .aspectRatio =
-            {
-                .aspectRatio = (3.0f / 2.0f),
-            },
-        .image =
-            {
-                .imageData = static_cast<void *>(&photo.image_data),
-            },
-    }) {
-      CLAY({
-          .layout =
-              {
-                  .sizing =
-                      {
-                          .width = CLAY_SIZING_GROW(0),
-                          .height = CLAY_SIZING_GROW(0),
-                      },
-              },
-      }) {}
-      CLAY({
-          .layout =
-              {
-                  .sizing =
-                      {
-                          .width = CLAY_SIZING_FIXED(32),
-                          .height = CLAY_SIZING_FIXED(32),
-                      },
-                  .padding = CLAY_PADDING_ALL(3),
-              },
-          .backgroundColor =
-              photo.selected ? COLOR_SELECTED_GREEN : COLOR_PURE_WHITE,
-          .cornerRadius =
-              CLAY_CORNER_RADIUS(static_cast<float>(checkbox_corner_radius)),
-          .image =
-              {
-                  .imageData = static_cast<void *>(&edge_sheen_data),
-              },
-          .border =
-              {
-                  .color = COLOR_BLACK,
-                  .width =
-                      {
-                          .left = 2,
-                          .right = 2,
-                          .top = 2,
-                          .bottom = 2,
-                      },
-              },
-      }) {
-        CLAY({
-            .layout =
-                {
-                    .sizing =
-                        {
-                            .width = CLAY_SIZING_GROW(0),
-                            .height = CLAY_SIZING_GROW(0),
-                        },
-                },
-            .backgroundColor = COLOR_PURE_WHITE,
-            .cornerRadius = CLAY_CORNER_RADIUS(
-                static_cast<float>(checkbox_corner_radius - 3)),
-            .image =
-                {
-                    .imageData = static_cast<void *>(&bg_sheen_data),
-                },
-        }) {
-          CLAY({
-              .layout =
-                  {
-                      .sizing =
-                          {
-                              .width = CLAY_SIZING_GROW(0),
-                              .height = CLAY_SIZING_GROW(0),
-                          },
-                  },
-              .backgroundColor =
-                  photo.selected ? COLOR_SELECTED_GREEN : COLOR_TRANSPARENT,
-              .image =
-                  {
-                      .imageData = static_cast<void *>(&check_data),
-                  },
-          }) {}
-        }
-      }
-    }
-  }
-}
-
-void PhotoGrid(std::vector<Photo> &photos, int image_minimum_width) {
-  // Photo grid calculation
-  int image_counter = 0;
-  int photo_columns = renderer.width / image_minimum_width;
-
-  int num_images = std::size(photos);
-  CLAY({
-      .id = CLAY_ID("PhotoGrid"),
-      .layout =
-          {
-              .sizing =
-                  {
-                      .width = CLAY_SIZING_GROW(0),
-                      .height = CLAY_SIZING_GROW(0),
-                  },
-          },
-      .clip =
-          {
-              .vertical = true,
-              .childOffset = Clay_GetScrollOffset(), // Somehow this function
-                                                     // resets the scroll to 0
-                                                     // when the overlay is
-                                                     // first rendered
-          },
-  }) {
-    CLAY({
-        .layout =
-            {
-                .sizing =
-                    {
-                        .width = CLAY_SIZING_GROW(0),
-                        .height = CLAY_SIZING_GROW(0),
-                    },
-                .padding = CLAY_PADDING_ALL(8),
-                .childGap = 4,
-                .layoutDirection = CLAY_TOP_TO_BOTTOM,
-            },
-    }) {
-      for (int i = 0; i < 16 && image_counter < num_images; i++) {
-        CLAY({.layout = {
-                  .sizing = {.width = CLAY_SIZING_GROW(0),
-                             .height = CLAY_SIZING_FIT(0)},
-                  .childGap = 4,
-                  .layoutDirection = CLAY_LEFT_TO_RIGHT,
-              }}) {
-          for (int i = 0; i < photo_columns; i++) {
-            if (image_counter < num_images) {
-              PhotoItem(photos[image_counter]);
-              image_counter++;
-            } else {
-              CLAY({
-                  .layout =
-                      {
-                          .sizing = {.width = CLAY_SIZING_GROW(0),
-                                     .height = CLAY_SIZING_GROW(0)},
-                      },
-              }) {}
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-void Placeholder() {
-  CLAY({
-      .layout =
-          {
-              .sizing =
-                  {
-                      .width = CLAY_SIZING_GROW(),
-                      .height = CLAY_SIZING_GROW(),
-                  },
-              .childAlignment =
-                  {
-                      .x = CLAY_ALIGN_X_CENTER,
-                      .y = CLAY_ALIGN_Y_CENTER,
-                  },
-          },
-  }) {
-    CLAY({
-        .layout =
-            {
-                .sizing =
-                    {
-                        .width = CLAY_SIZING_FIT(),
-                        .height = CLAY_SIZING_FIT(),
-                    },
-            },
-    }) {
-      CLAY_TEXT(CLAY_STRING("Looks like you haven't opened a folder yet."),
-                CLAY_TEXT_CONFIG({
-                    .textColor = COLOR_PURE_WHITE,
-                    .fontSize = 24,
-                    .wrapMode = CLAY_TEXT_WRAP_WORDS,
-                    .textAlignment = CLAY_TEXT_ALIGN_CENTER,
-                }));
-    }
-  }
-}
-
-void Button(Clay_String label,
-            void button_interaction(Clay_ElementId elementId,
-                                    Clay_PointerData pointerInfo,
-                                    intptr_t userData)) {
-  uint16_t button_height = 48;
-  CLAY({
-      .layout =
-          {
-              .sizing =
-                  {
-                      .width = CLAY_SIZING_FIT(),
-                      .height =
-                          CLAY_SIZING_FIXED(static_cast<float>(button_height)),
-                  },
-              .padding = CLAY_PADDING_ALL(3),
-          },
-      .backgroundColor = COLOR_PURE_WHITE,
-      .cornerRadius = CLAY_CORNER_RADIUS(button_height / 2.0f),
-      .image =
-          {
-              .imageData = static_cast<void *>(&edge_sheen_data),
-          },
-      .border =
-          {
-              .color = COLOR_BLACK,
-              .width =
-                  {
-                      .left = 2,
-                      .right = 2,
-                      .top = 2,
-                      .bottom = 2,
-                  },
-          },
-  }) {
-    Clay_OnHover(button_interaction, NULL);
-    CLAY({
-        .layout =
-            {
-                .sizing =
-                    {
-                        .width = CLAY_SIZING_GROW(0),
-                        .height = CLAY_SIZING_GROW(0),
-                    },
-                .padding =
-                    {
-                        .left = 16,
-                        .right = 16,
-                        .top = 0,
-                        .bottom = 0,
-                    },
-                .childAlignment =
-                    {
-                        .x = CLAY_ALIGN_X_CENTER,
-                        .y = CLAY_ALIGN_Y_CENTER,
-                    },
-            },
-        .backgroundColor = Clay_Hovered() ? COLOR_PURE_WHITE : COLOR_LIGHT_GREY,
-        .cornerRadius = CLAY_CORNER_RADIUS(button_height / 2.0f - 3.0f),
-        .image =
-            {
-                .imageData = static_cast<void *>(&bg_sheen_data),
-            },
-    }) {
-      CLAY_TEXT(label, CLAY_TEXT_CONFIG({
-                           .textColor = {255, 255, 255, 255},
-                           .fontSize = 20,
-                           .wrapMode = CLAY_TEXT_WRAP_NONE,
-                           .textAlignment = CLAY_TEXT_ALIGN_CENTER,
-                       }));
-    }
-  }
-}
-
-void Tally(Clay_String label) {
-  uint16_t diameter = 48;
-  CLAY({
-      .layout =
-          {
-              .sizing =
-                  {
-                      .width = CLAY_SIZING_FIXED(static_cast<float>(diameter)),
-                      .height = CLAY_SIZING_FIXED(static_cast<float>(diameter)),
-                  },
-              .padding = CLAY_PADDING_ALL(3),
-          },
-      .backgroundColor = COLOR_SELECTED_GREEN,
-      .cornerRadius = CLAY_CORNER_RADIUS(diameter / 2.0f),
-      .image =
-          {
-              .imageData = static_cast<void *>(&edge_sheen_data),
-          },
-      .border =
-          {
-              .color = COLOR_BLACK,
-              .width =
-                  {
-                      .left = 2,
-                      .right = 2,
-                      .top = 2,
-                      .bottom = 2,
-                  },
-          },
-  }) {
-    CLAY({
-        .layout =
-            {
-                .sizing =
-                    {
-                        .width = CLAY_SIZING_GROW(0),
-                        .height = CLAY_SIZING_GROW(0),
-                    },
-                .padding =
-                    {
-                        .left = 0,
-                        .right = 0,
-                        .top = 0,
-                        .bottom = 0,
-                    },
-                .childAlignment =
-                    {
-                        .x = CLAY_ALIGN_X_CENTER,
-                        .y = CLAY_ALIGN_Y_CENTER,
-                    },
-            },
-        .backgroundColor = Clay_Hovered() ? COLOR_PURE_WHITE : COLOR_LIGHT_GREY,
-        .cornerRadius = CLAY_CORNER_RADIUS(diameter / 2.0f - 3.0f),
-        .image =
-            {
-                .imageData = static_cast<void *>(&bg_sheen_data),
-            },
-    }) {
-      CLAY_TEXT(label, CLAY_TEXT_CONFIG({
-                           .textColor = COLOR_SELECTED_GREEN,
-                           .fontSize = 20,
-                           .wrapMode = CLAY_TEXT_WRAP_NONE,
-                           .textAlignment = CLAY_TEXT_ALIGN_CENTER,
-                       }));
-    }
-  }
-}
-
-void BottomBar() {
-  float bottom_bar_corner_radius = 38.0f;
-  CLAY({
-      .id = CLAY_ID("BottomBar"),
-      .layout =
-          {
-              .sizing =
-                  {
-                      .width = CLAY_SIZING_GROW(0),
-                      .height = CLAY_SIZING_FIT(0),
-                  },
-              .padding =
-                  {
-                      .left = 3,
-                      .right = 3,
-                      .top = 3,
-                      .bottom = 0,
-                  },
-          },
-      .backgroundColor = COLOR_PURE_WHITE,
-      .cornerRadius =
-          {
-              .topLeft = bottom_bar_corner_radius,
-              .topRight = bottom_bar_corner_radius,
-              .bottomLeft = 0,
-              .bottomRight = 0,
-          },
-      .image =
-          {
-              .imageData = static_cast<void *>(&edge_sheen_data),
-          },
-      .floating =
-          {
-              .attachPoints =
-                  {
-                      .element = CLAY_ATTACH_POINT_CENTER_BOTTOM,
-                      .parent = CLAY_ATTACH_POINT_CENTER_BOTTOM,
-                  },
-              .attachTo = CLAY_ATTACH_TO_PARENT,
-          },
-      .border =
-          {
-              .color = COLOR_BLACK,
-              .width =
-                  {
-                      .left = 2,
-                      .right = 2,
-                      .top = 2,
-                      .bottom = 0,
-                  },
-          },
-  }) {
-    CLAY({
-        .layout =
-            {
-                .sizing =
-                    {
-                        .width = CLAY_SIZING_GROW(0),
-                        .height = CLAY_SIZING_GROW(0),
-                    },
-                .padding =
-                    {
-                        .left = 4,
-                        .right = 4,
-                        .top = 4,
-                        .bottom = 4,
-                    },
-            },
-        .backgroundColor = COLOR_GREY,
-        .cornerRadius =
-            {
-                .topLeft = bottom_bar_corner_radius - 3,
-                .topRight = bottom_bar_corner_radius - 3,
-                .bottomLeft = 0,
-                .bottomRight = 0,
-            },
-        .image =
-            {
-                .imageData = static_cast<void *>(&bg_sheen_data),
-            },
-    }) {
-      // Left Align
-      CLAY({
-          .layout =
-              {
-                  .sizing =
-                      {
-                          .width = CLAY_SIZING_GROW(0),
-                          .height = CLAY_SIZING_GROW(0),
-                      },
-                  .childAlignment =
-                      {
-                          .x = CLAY_ALIGN_X_LEFT,
-                          .y = CLAY_ALIGN_Y_CENTER,
-                      },
-                  .layoutDirection = CLAY_LEFT_TO_RIGHT,
-              },
-      }) {
-        Button(CLAY_STRING("Open Folder"),
-               handle_open_folder_button_interaction);
-        CLAY({
-            .layout =
-                {
-                    .sizing =
-                        {
-                            .width = CLAY_SIZING_GROW(0),
-                            .height = CLAY_SIZING_GROW(0),
-                        },
-                },
-        }) {}
-        Tally(Clay_String{
-            .length = static_cast<int32_t>(tally_label.length()),
-            .chars = tally_label.c_str(),
-        });
-      }
-      // Center Align
-      CLAY({
-          .layout =
-              {
-                  .sizing =
-                      {
-                          .width = CLAY_SIZING_FIT(),
-                          .height = CLAY_SIZING_GROW(0),
-                      },
-                  .childAlignment =
-                      {
-                          .x = CLAY_ALIGN_X_CENTER,
-                      },
-              },
-      }) {
-        Button(CLAY_STRING("Finalize"), handle_finalize_button_interaction);
-      }
-      // Right Align
-      CLAY({
-          .layout =
-              {
-                  .sizing =
-                      {
-                          .width = CLAY_SIZING_GROW(0),
-                          .height = CLAY_SIZING_GROW(0),
-                      },
-                  .childAlignment =
-                      {
-                          .x = CLAY_ALIGN_X_RIGHT,
-                      },
-                  .layoutDirection = CLAY_LEFT_TO_RIGHT,
-              },
-      }) {
-        Button(CLAY_STRING("Sort"), handle_sort_button_interaction);
-        Button(CLAY_STRING("Filters"), handle_filters_button_interaction);
-      }
-    }
   }
 }
 
 static inline Clay_Dimensions MeasureText(Clay_StringSlice text,
                                           Clay_TextElementConfig *config,
                                           void *userData) {
+  Renderer &renderer = *(Renderer *)userData;
   float scalar = config->fontSize / renderer.font_sample_point_size;
   return Clay_Dimensions{.width = (float)text.length * renderer.glyph_size.x *
                                   scalar,
                          .height = (float)renderer.glyph_size.y * scalar};
 }
 
-bool init() {
-  renderer.init();
+Texture load_and_upload_texture(Renderer &renderer, std::string path,
+                                bool tiling = false) {
+  Image image = ImageLoader::load(path);
+  TextureID texture_id =
+      renderer.upload_texture(image.pixels.data(), image.width, image.height);
 
-  std::vector<std::string> loaded_sprite_paths;
-  for (auto &[entity_id, sprite_component] : sprite_components) {
-    auto it = std::find(loaded_sprite_paths.begin(), loaded_sprite_paths.end(),
-                        sprite_component.path);
+  Texture texture_data;
+  texture_data.path = path;
+  texture_data.tiling = tiling;
+  texture_data.id = texture_id;
 
-    if (it != loaded_sprite_paths.end()) {
-      continue;
-    }
+  SDL_Log("Loaded texture %s with id %zu", path.c_str(), texture_id);
 
-    SDL_Surface *image_data = IMG_Load(sprite_component.path.c_str());
-    if (!image_data) {
-      SDL_Log("Failed to load image! %s", sprite_component.path.c_str());
-      return false;
-    }
-
-    sprite_component.size = glm::ivec2(image_data->w, image_data->h);
-    renderer.load_texture(sprite_component.path, image_data);
-    SDL_DestroySurface(image_data);
-    loaded_sprite_paths.push_back(sprite_component.path);
-  }
-  return true;
+  return texture_data;
 }
-
-bool loop() { return true; }
-
-bool cleanup() {
-  renderer.cleanup();
-  return true;
-}
-
-// TODO: Give feedback after submitting finalize button
-// TODO: Reset screen when finalize is pressed
 
 int main(int argc, char *argv[]) {
-  char lBuffer[1024];
-
-  tinyfd_beep();
-  char *lWillBeGraphicMode = tinyfd_inputBox("tinyfd_query", NULL, NULL);
-
-  strcpy(lBuffer, "tinyfiledialogs\nv");
-  strcat(lBuffer, tinyfd_version);
-  if (lWillBeGraphicMode) {
-    strcat(lBuffer, "\ngraphic mode: ");
-  } else {
-    strcat(lBuffer, "\nconsole mode: ");
-  }
-  strcat(lBuffer, tinyfd_response);
+  AppState app_state;
 
   // ECS
+  std::unordered_map<EntityID, SpriteComponent> sprite_components;
+  std::unordered_map<EntityID, TransformComponent> transform_components;
+
   EntityManager entity_manager;
 
-  // Player Amogus
-  EntityID amogus = entity_manager.create();
+  EntityID cursor = entity_manager.create();
   SpriteComponent sprite_component = {
       .path = "res/uv.bmp",
   };
-  sprite_components[amogus] = sprite_component;
+  sprite_components[cursor] = sprite_component;
   TransformComponent transform_component = {
       .position = glm::vec2(64.0f, 64.0f),
       .scale = glm::vec2(1.0f, 1.0f),
   };
-  transform_components[amogus] = transform_component;
+  transform_components[cursor] = transform_component;
 
-  // Init(texture uploading) must be after entities are created
-  if (!init()) {
-    return 1;
-  }
+  // Renderer
+  const int WIDTH = 1080;
+  const int HEIGHT = 720;
+  Renderer renderer(WIDTH, HEIGHT);
 
-  uint64_t total_memory_size = Clay_MinMemorySize();
+  // Load sprite textures
+  SpriteRenderer::upload_sprites(renderer, sprite_components);
+
+  // Clay setup
+  size_t total_memory_size = Clay_MinMemorySize();
   Clay_Arena clay_memory = Clay_CreateArenaWithCapacityAndMemory(
       total_memory_size, malloc(total_memory_size));
   Clay_Dimensions clay_dimensions = {.width = (float)WIDTH,
                                      .height = (float)HEIGHT};
   Clay_Context *clayContextBottom = Clay_Initialize(
       clay_memory, clay_dimensions, Clay_ErrorHandler{handle_clay_errors});
-  shut_up_data[0] = 1;
-  Clay_SetMeasureTextFunction(MeasureText, (void *)shut_up_data);
 
-  SDL_Surface *edge_sheen = IMG_Load("res/edge_sheen.png");
-  renderer.load_texture("res/edge_sheen.png", edge_sheen);
-  SDL_DestroySurface(edge_sheen);
+  Clay_SetMeasureTextFunction(MeasureText, &renderer);
 
-  edge_sheen_data.path = "res/edge_sheen.png";
-  edge_sheen_data.tiling = false;
-
-  SDL_Surface *carbon_fiber = IMG_Load("res/carbon_fiber.png");
-  renderer.load_texture("res/carbon_fiber.png", carbon_fiber);
-  SDL_DestroySurface(carbon_fiber);
-
-  carbon_fiber_data.path = "res/carbon_fiber.png";
-  carbon_fiber_data.tiling = true;
-
-  SDL_Surface *vignette = IMG_Load("res/vignette.png");
-  renderer.load_texture("res/vignette.png", vignette);
-  SDL_DestroySurface(vignette);
-
-  vignette_data.path = "res/vignette.png";
-  vignette_data.tiling = false;
-
-  SDL_Surface *bg_sheen = IMG_Load("res/bg_sheen.png");
-  renderer.load_texture("res/bg_sheen.png", bg_sheen);
-  SDL_DestroySurface(bg_sheen);
-
-  bg_sheen_data.path = "res/bg_sheen.png";
-  bg_sheen_data.tiling = false;
-
-  SDL_Surface *check = IMG_Load("res/check.png");
-  renderer.load_texture("res/check.png", check);
-  SDL_DestroySurface(check);
-
-  check_data.path = "res/check.png";
-  check_data.tiling = false;
+  // Manually load Clay textures
+  Texture edge_sheen_data =
+      load_and_upload_texture(renderer, "res/edge_sheen.png");
+  Texture carbon_fiber_data =
+      load_and_upload_texture(renderer, "res/carbon_fiber.png", true);
+  Texture vignette_data = load_and_upload_texture(renderer, "res/vignette.png");
+  Texture bg_sheen_data = load_and_upload_texture(renderer, "res/bg_sheen.png");
+  Texture check_data = load_and_upload_texture(renderer, "res/check.png");
 
   // Timing
+  const int physics_tick_rate = 60;
+  const float physics_delta_time = 1.0f / static_cast<float>(physics_tick_rate);
+
   uint32_t prev_frame_tick = SDL_GetTicks();
-  float physics_delta_time = 1.0f / physics_tick_rate;
   float process_delta_time = 0.0f;
   float accumulator = 0.0;
-
+  float time_scale = 1.0f;
   int physics_frame_count = 0;
   int process_frame_count = 0;
 
-  float time_scale = 1.0f;
-
   float scroll_speed = 6.0f;
   bool is_mouse_down = false;
-
-  bool running = true;
-
   Clay_Vector2 mouse_position = {0.0f, 0.0f};
 
-  // Do the one where it only updates when an event happens
+  bool running = true;
   while (running) {
     // Calculate delta time
     uint32_t frame_tick = SDL_GetTicks();
@@ -1122,17 +242,38 @@ int main(int argc, char *argv[]) {
     if (accumulator >= (physics_delta_time / time_scale)) {
       accumulator -= (physics_delta_time / time_scale);
       ++physics_frame_count;
-      if (physics_frame_count >= static_cast<int>(physics_tick_rate)) {
-        SDL_Log("FPS: %d", static_cast<int>(process_frame_count));
-        physics_frame_count = 0;
-        process_frame_count = 0;
+    }
+    if (physics_frame_count >= physics_tick_rate) {
+      SDL_Log("FPS: %d", static_cast<int>(process_frame_count));
+      physics_frame_count = 0;
+      process_frame_count = 0;
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(app_state.upload_mutex);
+      while (!app_state.upload_queue.empty()) {
+        PendingTexture &pending = app_state.upload_queue.front();
+        TextureID id =
+            renderer.upload_texture(pending.image.pixels.data(),
+                                    pending.image.width, pending.image.height);
+        Texture tex;
+        tex.path = pending.path;
+        tex.tiling = false;
+        tex.id = id;
+
+        Photo photo;
+        photo.image_data = tex;
+        photo.selected = false;
+        photo.file_path = pending.path;
+
+        app_state.photos.push_back(photo);
+        app_state.upload_queue.pop();
       }
     }
 
     // Poll inputs
-    Clay_Vector2 mouse_scroll = {0.0f, 0.0f};
-
     // const bool *keystate = SDL_GetKeyboardState(NULL);
+    Clay_Vector2 mouse_scroll = {0.0f, 0.0f};
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
       switch (event.type) {
@@ -1159,17 +300,11 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    TransformComponent &cursor_transform = transform_components[amogus];
+    TransformComponent &cursor_transform = transform_components[cursor];
     cursor_transform.position = glm::vec2(mouse_position.x, mouse_position.y);
 
-    // Get tally count
-    // This is technically a bit redundant
-    // but is guaranteed to not be out of sync
-    std::stringstream ss;
-    ss << get_selected_photos_count();
-    tally_label = ss.str();
-
-    renderer.begin_frame(); // Start here to update window dimensions for clay
+    // Query resolution so clay
+    renderer.update_swapchain_texture();
 
     // Clay foreplay
     Clay_Dimensions clay_dimensions = {
@@ -1196,7 +331,7 @@ int main(int argc, char *argv[]) {
                 .padding = CLAY_PADDING_ALL(0),
                 .layoutDirection = CLAY_TOP_TO_BOTTOM,
             },
-        .backgroundColor = COLOR_PURE_WHITE,
+        .backgroundColor = Color::PURE_WHITE,
         .image =
             {
                 .imageData = static_cast<void *>(&carbon_fiber_data),
@@ -1213,15 +348,17 @@ int main(int argc, char *argv[]) {
                   .childGap = 0,
                   .layoutDirection = CLAY_TOP_TO_BOTTOM,
               },
-          .backgroundColor = COLOR_PURE_WHITE,
+          .backgroundColor = Color::PURE_WHITE,
           .image =
               {
                   .imageData = static_cast<void *>(&vignette_data),
               },
       }) {
         // Image Grid
-        if (folder_opened) {
-          PhotoGrid(photos, 240 * renderer.viewport_scale);
+        if (app_state.folder_opened) {
+          PhotoGrid(edge_sheen_data, bg_sheen_data, check_data,
+                    app_state.photos,
+                    renderer.width / 240.0f * renderer.viewport_scale);
         } else {
           Placeholder();
         }
@@ -1238,31 +375,19 @@ int main(int argc, char *argv[]) {
         }) {}
       }
       // Bottom Bar
-      BottomBar();
+      BottomBar(edge_sheen_data, bg_sheen_data, app_state.tally_label,
+                on_open_folder, on_finalize, on_sort, on_filter,
+                reinterpret_cast<intptr_t>(&app_state));
     }
+
     Clay_RenderCommandArray render_commands = Clay_EndLayout();
-
-    // TODO: Anything outside of renderer should first collate commands
-    // This should allow for unloaded sprites to be identified, allowing
-    // renderer to load them in first before trying to render them, instead
-    // of rendering them on the next frame.
-    //
-    // This should also help if there are many draw calls, and it also
-    // should facilitate objects which use the same resources
-    //
-    // Best implementation of these would make the draw_X commands internal,
-    // and instead provide an exposed "draw" function that instead
-    // adds the draw command to a staging array.
-
-    // TODO: Clay renderer should have an id: data unordered map to allow
-    // for basic animations like css
-    // Would also probably need to make a Tween class or just lerp it.
-
+    renderer.begin_frame(); // Start here to update window dimensions for clay
     ClayRenderer::render_commands(renderer, render_commands);
-    SpriteSystem::draw_all(renderer);
+    SpriteRenderer::draw_all(renderer, sprite_components, transform_components);
     renderer.end_frame();
   }
-  SDL_Log("Exiting...");
-  cleanup();
+  if (app_state.load_thread.joinable()) {
+    app_state.load_thread.join();
+  }
   return 0;
 }

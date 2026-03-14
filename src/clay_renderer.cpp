@@ -2,7 +2,7 @@
 
 #include <sys/types.h>
 
-#include "SDL3/SDL_log.h"
+#include <SDL3/SDL_log.h>
 
 namespace ClayRenderer {
 void render_commands(Renderer &renderer,
@@ -181,9 +181,9 @@ void render_commands(Renderer &renderer,
           render_data_image->backgroundColor.b / 255.0f,
           render_data_image->backgroundColor.a / 255.0f,
       };
-      ImageData *data_pointer =
-          static_cast<ImageData *>(render_data_image->imageData); // Get pointer
-      ImageData image_data = *data_pointer; // Dereference pointer
+      Texture *data_pointer =
+          static_cast<Texture *>(render_data_image->imageData); // Get pointer
+      Texture image_data = *data_pointer; // Dereference pointer
       glm::vec4 corner_radii = {
           render_data_image->cornerRadius.topLeft,
           render_data_image->cornerRadius.topRight,
@@ -196,7 +196,7 @@ void render_commands(Renderer &renderer,
       //     / 2.0f), 0.0f, glm::vec2(rect.w, rect.h), glm::vec4(1.0f));
 
       // Draw the image
-      renderer.draw_texture_rect(image_data.path, glm::vec2(rect.x, rect.y),
+      renderer.draw_texture_rect(image_data.id, glm::vec2(rect.x, rect.y),
                                  glm::vec2(rect.w, rect.h), modulate_color,
                                  corner_radii, image_data.tiling);
     } break;
